@@ -1,0 +1,79 @@
+/* Mind Map — Excalidraw-minimal light theme
+   Ported from prototypes/theme.css — single source of truth */
+
+:root {
+  /* surfaces */
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --canvas: #fdfcfb;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --border-faint: #eef2f7;
+
+  /* text */
+  --text: #0f172a;
+  --text-strong: #020617;
+  --muted: #64748b;
+  --faint: #94a3b8;
+  --placeholder: #94a3b8;
+
+  /* accent */
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-ink: #ffffff;
+  --accent-subtle: #eff6ff;
+  --accent-ring: #93c5fd;
+
+  /* semantic */
+  --danger: #ef4444;
+  --danger-subtle: #fef2f2;
+  --success: #0ea5e9;
+
+  /* mind-map specifics */
+  --node-fill: #ffffff;
+  --node-stroke: #334155;
+  --node-stroke-faint: #cbd5e1;
+  --node-selected-stroke: var(--accent);
+  --node-selected-fill: #f8fbff;
+  --line: #94a3b8;
+  --line-strong: #64748b;
+  --plus-bg: #ffffff;
+  --plus-stroke: #334155;
+  --plus-accent: var(--accent);
+
+  /* type */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* scale & shape */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+  --shadow-sm: 0 1px 2px rgba(15,23,42,0.06), 0 1px 3px rgba(15,23,42,0.06);
+  --shadow: 0 4px 12px rgba(15,23,42,0.07), 0 1px 3px rgba(15,23,42,0.06);
+  --shadow-lg: 0 8px 32px rgba(15,23,42,0.10);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}

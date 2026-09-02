@@ -1,0 +1,21 @@
+.editor-canvas {
+    position: relative;
+    height: calc(100vh - 56px);
+    background: var(--canvas);
+    background-image: radial-gradient(var(--border-faint) 1px, transparent 1px);
+    background-size: 22px 22px;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 24px;
+}
+
+.editor-placeholder {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px 28px;
+    box-shadow: var(--shadow-sm);
+    max-width: 420px;
+}

@@ -2,7 +2,7 @@
 
 ## MVP
 
-- [ ] 1. **App shell & minimal theme** — Vite React shell, routing (SPA-safe for GitHub Pages), Excalidraw-minimal MUI theme, base path config
+- [x] 1. **App shell & minimal theme** — Vite React shell, routing (SPA-safe for GitHub Pages), Excalidraw-minimal MUI theme, base path config
 - [ ] 2. **Home projects management** — project list/grid (newest first) with create/rename/delete (unique name validation, delete confirm), empty state, localStorage persistence
 - [ ] 3. **Tree canvas with auto-layout** — centered root node, strict tree auto-layout (SVG + lines), fixed-size circular nodes with char-limited text, pan/drag + wheel/pinch zoom + re-center, persisted viewport
 - [ ] 4. **Node add & edit interactions** — multiple plus buttons around node (hover on desktop / tap on mobile, large touch targets) to add child + auto-focus inline editor; inline edit with limit enforcement
