@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Node } from "../../types/node";
+import type { Node, NodeSide } from "../../types/node";
 import type { Position } from "../../lib/layout";
 import type { Viewport } from "../../types/project";
 import { clampZoom, DEFAULT_VIEWPORT, getViewport, MIN_ZOOM, setViewport } from "../../lib/storage";
@@ -15,11 +15,15 @@ type TreeCanvasProps = {
     edges: { from: string; to: string }[];
     bounds: Bounds;
     recenterSignal?: number;
+    onAddChild?: (parentId: string, text: string, side: NodeSide) => Node | null;
+    onUpdateText?: (nodeId: string, text: string) => Node | null;
 };
 
-export default function TreeCanvas({ projectId, nodes, positions, edges, bounds, recenterSignal }: TreeCanvasProps) {
+export default function TreeCanvas({ projectId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText }: TreeCanvasProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [viewport, setViewportState] = useState<Viewport>(() => getViewport(projectId) ?? { ...DEFAULT_VIEWPORT });
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [animate, setAnimate] = useState(false);
     const [dragging, setDragging] = useState(false);
     const dragRef = useRef<{ sx: number; sy: number; vx: number; vy: number } | null>(null);
@@ -111,6 +115,7 @@ export default function TreeCanvas({ projectId, nodes, positions, edges, bounds,
 
     function handleMouseDown(e: React.MouseEvent) {
         if (e.button !== 0) return;
+        if (e.target === e.currentTarget) setSelectedId(null);
         e.preventDefault();
         dragRef.current = { sx: e.clientX, sy: e.clientY, vx: viewport.x, vy: viewport.y };
         setDragging(true);
@@ -136,6 +141,7 @@ export default function TreeCanvas({ projectId, nodes, positions, edges, bounds,
     }
 
     function handleTouchStart(e: React.TouchEvent) {
+        if (e.target === e.currentTarget) setSelectedId(null);
         if (e.touches.length === 1) {
             const t = e.touches[0];
             dragRef.current = { sx: t.clientX, sy: t.clientY, vx: viewport.x, vy: viewport.y };
@@ -204,6 +210,65 @@ export default function TreeCanvas({ projectId, nodes, positions, edges, bounds,
         }
     }
 
+    function handleSelect(id: string) {
+        commitPendingEdit(id);
+        setSelectedId(id);
+        focusCircle(id);
+    }
+
+    function handlePlus(parentId: string, side: NodeSide) {
+        if (!onAddChild) return;
+        const child = onAddChild(parentId, "New idea", side);
+        if (child) {
+            setSelectedId(child.id);
+            setEditingId(child.id);
+        }
+    }
+
+    function handleEditStart(id: string) {
+        commitPendingEdit(id);
+        setSelectedId(id);
+        setEditingId(id);
+    }
+
+    function commitPendingEdit(exceptId: string) {
+        // Canvas mousedown prevents default, so clicking another node never
+        // moves focus and the open editor would stay uncommitted. Blur it
+        // first so the existing onBlur commit path runs before switching.
+        if (editingId !== null && editingId !== exceptId) {
+            (document.activeElement as HTMLElement | null)?.blur?.();
+        }
+    }
+
+    function handleCommitText(nodeId: string, text: string) {
+        const node = nodes.find((n) => n.id === nodeId);
+        const trimmed = text.trim();
+        // Empty or unchanged text reverts: the prior text stays, no write.
+        if (!node || trimmed.length === 0 || trimmed === node.text) {
+            setEditingId(null);
+            focusCircle(nodeId);
+            return;
+        }
+        const updated = onUpdateText?.(nodeId, text) ?? null;
+        // On storage failure the banner shows the error and the editor stays open.
+        if (updated) {
+            setEditingId(null);
+            focusCircle(nodeId);
+        }
+    }
+
+    function handleCancelEdit(nodeId: string) {
+        setEditingId(null);
+        focusCircle(nodeId);
+    }
+
+    function focusCircle(nodeId: string) {
+        // The circle div survives the editor/text swap, so focusing it keeps
+        // keyboard users in the canvas flow instead of dropping to body.
+        const el = document.querySelector(`[data-node-id="${nodeId}"] .node-circle`);
+        (el as HTMLElement | null)?.focus?.();
+    }
+
     return (
         <div
             ref={containerRef}
@@ -249,7 +314,22 @@ export default function TreeCanvas({ projectId, nodes, positions, edges, bounds,
                 {visibleNodes.map((n) => {
                     const pos = positions.get(n.id);
                     if (!pos) return null;
-                    return <NodeCircle key={n.id} id={n.id} text={n.text} x={pos.x} y={pos.y} />;
+                    return (
+                        <NodeCircle
+                            key={n.id}
+                            id={n.id}
+                            text={n.text}
+                            x={pos.x}
+                            y={pos.y}
+                            selected={selectedId === n.id}
+                            editing={editingId === n.id}
+                            onSelect={handleSelect}
+                            onAddChild={handlePlus}
+                            onEditStart={handleEditStart}
+                            onCommitText={handleCommitText}
+                            onCancelEdit={handleCancelEdit}
+                        />
+                    );
                 })}
             </div>
         </div>

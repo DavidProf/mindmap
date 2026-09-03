@@ -5,7 +5,7 @@
 - [x] 1. **App shell & minimal theme** — Vite React shell, routing (SPA-safe for GitHub Pages), Excalidraw-minimal MUI theme, base path config
 - [x] 2. **Home projects management** — project list/grid (newest first) with create/rename/delete (unique name validation, delete confirm), empty state, localStorage persistence
 - [x] 3. **Tree canvas with auto-layout** — centered root node, strict tree auto-layout (SVG + lines), fixed-size circular nodes with char-limited text, pan/drag + wheel/pinch zoom + re-center, persisted viewport
-- [ ] 4. **Node add & edit interactions** — multiple plus buttons around node (hover on desktop / tap on mobile, large touch targets) to add child + auto-focus inline editor; inline edit with limit enforcement
+- [x] 4. **Node add & edit interactions** — multiple plus buttons around node (hover on desktop / tap on mobile, large touch targets) to add child + auto-focus inline editor; inline edit with limit enforcement
 - [ ] 5. **Context menu & branch controls** — right-click / long-press menu for Edit/Delete/Collapse-Expand, subtree delete with confirm (delete count), collapsed badge/indicator, persisted collapsed state with layout reflow
 - [ ] 6. **PNG export** — client-side export of the map as PNG (whole tree fitted, light background), export button on editor
 - [ ] 7. **Deploy & polish** — GitHub Pages build config, SPA 404 fallback, lastEdited timestamps, responsive/touch polish, error handling for storage/empty maps, zoom % indicator

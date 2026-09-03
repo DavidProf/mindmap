@@ -1,7 +1,10 @@
-// Tidy layered tree layout — stateless, pure, no DOM.
-// Constants chosen for fixed 88px circles and readable spacing.
+// Radial tidy-tree layout - stateless, pure, no DOM.
+// Root centers at (0,0); branches grow toward N/E/S/W by Node.side.
+// Same-side siblings fan out across their side quadrant, weighted by
+// visible leaf count. Constants tuned for fixed 88px circles.
 
-import type { Node } from "../types/node";
+import type { Node, NodeSide } from "../types/node";
+import { isNodeSide } from "../types/node";
 
 export const NODE_DIAMETER = 88;
 export const GAP_X = 32;
@@ -16,6 +19,16 @@ export type LayoutResult = {
     hiddenIds: Set<string>;
 };
 
+const SIDE_ORDER: readonly NodeSide[] = ["east", "south", "west", "north"];
+
+// Screen coords (y down): east 0deg, south 90deg, west 180deg, north 270deg.
+const SIDE_BASE_DEG: Record<NodeSide, number> = { east: 0, south: 90, west: 180, north: 270 };
+const QUADRANT_DEG = 90;
+
+function sideOf(node: Node): NodeSide {
+    return isNodeSide(node.side) ? node.side : "south";
+}
+
 export function computeLayout(
     nodes: Node[],
     rootId: string,
@@ -24,9 +37,10 @@ export function computeLayout(
     const gapX = opts?.gapX ?? GAP_X;
     const gapY = opts?.gapY ?? GAP_Y;
     const diameter = opts?.nodeDiameter ?? NODE_DIAMETER;
-    const stepX = diameter + gapX;
-    const stepY = diameter + gapY;
+    const step = diameter + gapY;
     const radius = diameter / 2;
+    // Inter-quadrant gap sized to roughly gapX at one radial step, clamped.
+    const marginDeg = Math.min(20, Math.max(2, ((gapX / step) * 180) / Math.PI / 2));
 
     const positions = new Map<string, Position>();
     const hiddenIds = new Set<string>();
@@ -91,50 +105,93 @@ export function computeLayout(
         }
     }
 
-    // Recursive tidy placement
-    let nextX = 0;
-    const placementVisited = new Set<string>();
+    function visibleChildren(id: string): Node[] {
+        return (childrenMap.get(id) ?? []).filter((c) => visibleIds.has(c.id));
+    }
 
-    function place(id: string, depth: number): void {
-        if (placementVisited.has(id)) {
-            console.warn(`[layout] cycle detected at ${id}, skipping`);
-            return;
+    // Visible leaf count per node weights each sibling's share of its quadrant.
+    const leafCount = new Map<string, number>();
+    const counting = new Set<string>();
+    function countLeaves(id: string): number {
+        const cached = leafCount.get(id);
+        if (cached !== undefined) return cached;
+        if (counting.has(id)) return 0;
+        counting.add(id);
+        const children = visibleChildren(id);
+        let total = 0;
+        for (const child of children) total += countLeaves(child.id);
+        counting.delete(id);
+        const result = children.length === 0 ? 1 : total;
+        leafCount.set(id, result);
+        return result;
+    }
+    countLeaves(rootId);
+
+    // Recursive radial placement, one step per depth.
+    const placementVisited = new Set<string>();
+    const toRad = Math.PI / 180;
+
+    function resolveOverlap(px: number, py: number, x: number, y: number): Position {
+        // A branch can fold back onto placed nodes (e.g. a west child of an
+        // east node lands on the root). Push outward along the same ray until
+        // clear so every pair stays at least one diameter apart.
+        for (let i = 0; i < 50; i++) {
+            let clash = false;
+            for (const p of positions.values()) {
+                if (Math.hypot(p.x - x, p.y - y) < diameter) {
+                    clash = true;
+                    break;
+                }
+            }
+            if (!clash) return { x, y };
+            const dx = x - px;
+            const dy = y - py;
+            const len = Math.hypot(dx, dy) || 1;
+            const next = len + step * 0.5;
+            x = px + (dx / len) * next;
+            y = py + (dy / len) * next;
         }
-        placementVisited.add(id);
-        const children = (childrenMap.get(id) ?? []).filter((c) => visibleIds.has(c.id));
-        if (children.length === 0) {
-            const x = nextX;
-            nextX += stepX;
-            positions.set(id, { x, y: depth * stepY });
-        } else {
-            for (const child of children) place(child.id, depth + 1);
-            // Average of children's x; if a child was cycle-skipped and has no position, filter it
-            const childXs = children
-                .map((c) => positions.get(c.id))
-                .filter((p): p is Position => p !== undefined)
-                .map((p) => p.x);
-            if (childXs.length === 0) {
-                const x = nextX;
-                nextX += stepX;
-                positions.set(id, { x, y: depth * stepY });
-            } else {
-                const avg = childXs.reduce((a, b) => a + b, 0) / childXs.length;
-                positions.set(id, { x: avg, y: depth * stepY });
+        return { x, y };
+    }
+
+    function placeChildren(parentId: string, px: number, py: number): void {
+        const children = visibleChildren(parentId);
+        if (children.length === 0) return;
+        const groups = new Map<NodeSide, Node[]>();
+        for (const child of children) {
+            const s = sideOf(child);
+            const arr = groups.get(s);
+            if (arr) arr.push(child);
+            else groups.set(s, [child]);
+        }
+        for (const side of SIDE_ORDER) {
+            const group = groups.get(side);
+            if (!group || group.length === 0) continue;
+            const base = SIDE_BASE_DEG[side] * toRad;
+            const half = ((QUADRANT_DEG - marginDeg * 2) / 2) * toRad;
+            const total = group.reduce((a, c) => a + (leafCount.get(c.id) ?? 1), 0);
+            let acc = 0;
+            for (const child of group) {
+                if (placementVisited.has(child.id)) {
+                    console.warn(`[layout] cycle detected at ${child.id}, skipping`);
+                    continue;
+                }
+                placementVisited.add(child.id);
+                const w = leafCount.get(child.id) ?? 1;
+                const frac = total > 0 ? (acc + w / 2) / total : 0.5;
+                const angle = base - half + frac * half * 2;
+                const raw = { x: px + step * Math.cos(angle), y: py + step * Math.sin(angle) };
+                const { x, y } = resolveOverlap(px, py, raw.x, raw.y);
+                positions.set(child.id, { x, y });
+                acc += w;
+                placeChildren(child.id, x, y);
             }
         }
     }
 
-    place(rootId, 0);
-
-    // Center root at (0,0)
-    const rootPos = positions.get(rootId);
-    if (rootPos) {
-        const offX = rootPos.x;
-        const offY = rootPos.y;
-        for (const [k, v] of positions) {
-            positions.set(k, { x: v.x - offX, y: v.y - offY });
-        }
-    }
+    placementVisited.add(rootId);
+    positions.set(rootId, { x: 0, y: 0 });
+    placeChildren(rootId, 0, 0);
 
     // Edges only for visible parent→child
     for (const id of visibleIds) {

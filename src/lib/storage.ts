@@ -3,7 +3,8 @@
 // Keys: mindmap:projects + mindmap:nodes (documented choice per spec).
 
 import type { Project, Viewport } from "../types/project";
-import type { Node } from "../types/node";
+import type { Node, NodeSide } from "../types/node";
+import { isNodeSide } from "../types/node";
 
 const PROJECTS_KEY = "mindmap:projects";
 const NODES_KEY = "mindmap:nodes";
@@ -190,6 +191,7 @@ export function createProject(name: string): Project {
         projectId: id,
         parentId: null,
         text: trimmed,
+        side: null,
         collapsed: false,
         createdAt: now,
         updatedAt: now,
@@ -241,6 +243,97 @@ export function getNodeCountForProject(projectId: string): number {
     return loadNodes().filter((n) => n.projectId === projectId).length;
 }
 
+export const MAX_NODE_TEXT_LENGTH = 60;
+
+export function validateNodeTextPure(raw: string): string | null {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return "Text is required.";
+    if (trimmed.length > MAX_NODE_TEXT_LENGTH) return `Text must be ${MAX_NODE_TEXT_LENGTH} characters or less.`;
+    return null;
+}
+
+function bumpedIso(prevUpdated: string): string {
+    const now = nowIso();
+    if (Date.parse(now) <= Date.parse(prevUpdated)) {
+        return new Date(Date.parse(prevUpdated) + 1).toISOString();
+    }
+    return now;
+}
+
+export function addChildNode(projectId: string, parentId: string, text: string, side: NodeSide): Node {
+    const err = validateNodeTextPure(text);
+    if (err) throw new Error(err);
+    if (!isNodeSide(side)) throw new Error("Invalid side.");
+
+    const projects = loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === projectId);
+    if (pIdx === -1) throw new Error("Project not found.");
+
+    const nodes = loadNodes();
+    const parent = nodes.find((n) => n.id === parentId && n.projectId === projectId);
+    if (!parent) throw new Error("Parent node not found.");
+
+    const now = nowIso();
+    const child: Node = {
+        id: genId(),
+        projectId,
+        parentId,
+        text: text.trim(),
+        side,
+        collapsed: false,
+        createdAt: now,
+        updatedAt: now,
+    };
+    nodes.push(child);
+    saveNodes(nodes);
+
+    projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+    saveProjects(projects);
+    return child;
+}
+
+export function updateNodeText(nodeId: string, text: string): Node {
+    const err = validateNodeTextPure(text);
+    if (err) throw new Error(err);
+
+    const nodes = loadNodes();
+    const idx = nodes.findIndex((n) => n.id === nodeId);
+    if (idx === -1) throw new Error("Node not found.");
+
+    const trimmed = text.trim();
+    if (nodes[idx].text === trimmed) return nodes[idx];
+    const updated: Node = { ...nodes[idx], text: trimmed, updatedAt: bumpedIso(nodes[idx].updatedAt) };
+    nodes[idx] = updated;
+    saveNodes(nodes);
+
+    const projects = loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
+    if (pIdx !== -1) {
+        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+        saveProjects(projects);
+    }
+    return updated;
+}
+
+export function setNodeCollapsed(nodeId: string, collapsed: boolean): Node {
+    const nodes = loadNodes();
+    const idx = nodes.findIndex((n) => n.id === nodeId);
+    if (idx === -1) throw new Error("Node not found.");
+    if (nodes[idx].collapsed === collapsed) return nodes[idx];
+
+    const updated: Node = { ...nodes[idx], collapsed, updatedAt: bumpedIso(nodes[idx].updatedAt) };
+    nodes[idx] = updated;
+    saveNodes(nodes);
+
+    const projects = loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
+    if (pIdx !== -1) {
+        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+        saveProjects(projects);
+    }
+    return updated;
+}
+
 export function clampZoom(z: number): number {
     if (!Number.isFinite(z)) return DEFAULT_VIEWPORT.zoom;
     return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
@@ -270,12 +363,7 @@ export function setViewport(projectId: string, viewport: Viewport): Viewport {
         y: viewport.y,
         zoom: clampZoom(viewport.zoom),
     };
-    let now = nowIso();
-    const prevUpdated = projects[idx].updatedAt;
-    if (Date.parse(now) <= Date.parse(prevUpdated)) {
-        now = new Date(Date.parse(prevUpdated) + 1).toISOString();
-    }
-    projects[idx] = { ...projects[idx], viewport: clamped, updatedAt: now };
+    projects[idx] = { ...projects[idx], viewport: clamped, updatedAt: bumpedIso(projects[idx].updatedAt) };
     saveProjects(projects);
     return clamped;
 }
