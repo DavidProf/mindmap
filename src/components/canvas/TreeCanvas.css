@@ -1,0 +1,56 @@
+.tree-canvas {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+}
+
+.tree-canvas--dragging {
+    cursor: grabbing;
+}
+
+.tree-world {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    overflow: visible;
+}
+
+.tree-edges {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.node-circle {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--node-fill);
+    border: 1px solid var(--node-stroke);
+    border-radius: 999px;
+    box-shadow: var(--shadow-sm);
+    text-align: center;
+    padding: 8px;
+    overflow: hidden;
+}
+
+.node-circle__text {
+    font-size: 13px;
+    line-height: 1.2;
+    color: var(--text);
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    max-width: 100%;
+}

@@ -5,9 +5,10 @@ import "./AppHeader.css";
 type AppHeaderProps = {
     variant?: "home" | "editor";
     projectName?: string;
+    onRecenter?: () => void;
 };
 
-export default function AppHeader({ variant = "home", projectName }: AppHeaderProps) {
+export default function AppHeader({ variant = "home", projectName, onRecenter }: AppHeaderProps) {
     if (variant === "editor") {
         return (
             <header className="app-header app-header--editor">
@@ -25,10 +26,14 @@ export default function AppHeader({ variant = "home", projectName }: AppHeaderPr
                     </span>
                 </div>
                 <div className="app-header__actions">
-                    <Button variant="outlined" size="small" disabled sx={{ borderRadius: "999px" }}>
-                        ⤢ Fit view
-                    </Button>
-                    <Button variant="outlined" size="small" disabled sx={{ borderRadius: "999px" }}>
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={onRecenter}
+                        disabled={!onRecenter}
+                        aria-label="Re-center"
+                        sx={{ borderRadius: "999px", textTransform: "none" }}
+                    >
                         ↺ Re-center
                     </Button>
                     <Button variant="contained" size="small" disabled sx={{ borderRadius: "999px" }}>

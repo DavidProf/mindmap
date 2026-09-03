@@ -14,3 +14,11 @@
 **Why it matters:** `HomePage.tsx` is 393 lines combining grid, empty state, create/rename/delete dialogs, menu, and navigation. `coding-standards.md` prefers one job per component and `src/components/[feature]/ComponentName.tsx`. The file is hard to review in one sitting and duplicates button `sx` props, increasing drift risk for future canvas features.
 **Suggested fix:** Extract `ProjectGrid`, `ProjectCard`, `CreateProjectDialog`, `RenameProjectDialog`, `ConfirmDeleteDialog` into `src/components/home/` (as the spec's optional split suggested). Keep `HomePage` as data wiring only. No behavior change.
 **Resolution:**
+
+### F-06 [P3] open - Viewport helpers lack unit coverage despite pure logic
+
+**File:** src/lib/layout.ts:19, src/lib/storage.ts:255
+**Found:** 2026-09-03 by /audit (scope: current; lens: tests)
+**Why it matters:** `computeLayout` and `getViewport`/`setViewport`/`clampZoom` are pure, high-value logic with many edge cases (single node centered, collapsed hiding, cycle, 100-node no-overlap, zoom clamp, `updatedAt` bump). No `test` command is declared (`AGENTS.md:199`), so the Testing gate in `coding-standards.md` is not active, but the next `/tests` will need coverage. Current manual `node --experimental-strip-types` smoke is not repeatable in CI.
+**Suggested fix:** When `/tests` adds Vitest, add `src/lib/layout.test.ts` and `src/lib/storage.viewport.test.ts` covering the done-whens from `current-feature.md:57` (single, symmetric, chain, collapsed, order, no-overlap, cycle, viewport clamp/migration).
+**Resolution:**

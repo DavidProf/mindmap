@@ -2,11 +2,15 @@
 // corruption recovery, quota handling, and unavailable fallback.
 // Keys: mindmap:projects + mindmap:nodes (documented choice per spec).
 
-import type { Project } from "../types/project";
+import type { Project, Viewport } from "../types/project";
 import type { Node } from "../types/node";
 
 const PROJECTS_KEY = "mindmap:projects";
 const NODES_KEY = "mindmap:nodes";
+
+export const MIN_ZOOM = 0.25;
+export const MAX_ZOOM = 3;
+export const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 };
 
 let storageAvailable: boolean | null = null;
 let memoryProjects: Project[] | null = null;
@@ -235,6 +239,45 @@ export function deleteProject(id: string): void {
 
 export function getNodeCountForProject(projectId: string): number {
     return loadNodes().filter((n) => n.projectId === projectId).length;
+}
+
+export function clampZoom(z: number): number {
+    if (!Number.isFinite(z)) return DEFAULT_VIEWPORT.zoom;
+    return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+}
+
+function isValidViewport(v: unknown): v is Viewport {
+    if (!v || typeof v !== "object") return false;
+    const o = v as Record<string, unknown>;
+    return typeof o.x === "number" && typeof o.y === "number" && typeof o.zoom === "number";
+}
+
+export function getViewport(projectId: string): Viewport | null {
+    const projects = loadProjects();
+    const p = projects.find((pr) => pr.id === projectId);
+    if (!p) return null;
+    if (!isValidViewport(p.viewport)) return { ...DEFAULT_VIEWPORT };
+    return p.viewport;
+}
+
+export function setViewport(projectId: string, viewport: Viewport): Viewport {
+    const projects = loadProjects();
+    const idx = projects.findIndex((pr) => pr.id === projectId);
+    if (idx === -1) throw new Error("Project not found.");
+
+    const clamped: Viewport = {
+        x: viewport.x,
+        y: viewport.y,
+        zoom: clampZoom(viewport.zoom),
+    };
+    let now = nowIso();
+    const prevUpdated = projects[idx].updatedAt;
+    if (Date.parse(now) <= Date.parse(prevUpdated)) {
+        now = new Date(Date.parse(prevUpdated) + 1).toISOString();
+    }
+    projects[idx] = { ...projects[idx], viewport: clamped, updatedAt: now };
+    saveProjects(projects);
+    return clamped;
 }
 
 // Test-only helper to reset in-memory state and storage keys
