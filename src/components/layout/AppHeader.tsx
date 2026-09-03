@@ -17,7 +17,7 @@ export default function AppHeader({ variant = "home", projectName }: AppHeaderPr
                     </Link>
                     <div className="app-header__title-group">
                         <div className="app-header__title">{projectName ?? "Untitled project"}</div>
-                        <div className="app-header__sub">localStorage · stub</div>
+                        <div className="app-header__sub">local</div>
                     </div>
                     <span className="app-header__sep" aria-hidden="true" />
                     <span className="app-header__hint">
@@ -63,14 +63,6 @@ export default function AppHeader({ variant = "home", projectName }: AppHeaderPr
             </div>
             <div className="app-header__actions">
                 <span className="app-header__badge">local only • GitHub Pages</span>
-                <Button
-                    variant="contained"
-                    size="small"
-                    disabled
-                    sx={{ borderRadius: "999px", textTransform: "none" }}
-                >
-                    + New project
-                </Button>
             </div>
         </header>
     );

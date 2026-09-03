@@ -1,0 +1,252 @@
+// Storage layer for Home projects management — localStorage with
+// corruption recovery, quota handling, and unavailable fallback.
+// Keys: mindmap:projects + mindmap:nodes (documented choice per spec).
+
+import type { Project } from "../types/project";
+import type { Node } from "../types/node";
+
+const PROJECTS_KEY = "mindmap:projects";
+const NODES_KEY = "mindmap:nodes";
+
+let storageAvailable: boolean | null = null;
+let memoryProjects: Project[] | null = null;
+let memoryNodes: Node[] | null = null;
+let hadCorruption = false;
+
+function checkStorageAvailable(): boolean {
+    if (storageAvailable !== null) return storageAvailable;
+    try {
+        const probe = "__mindmap_probe__";
+        window.localStorage.setItem(probe, "1");
+        window.localStorage.removeItem(probe);
+        storageAvailable = true;
+    } catch {
+        storageAvailable = false;
+        if (memoryProjects === null) memoryProjects = [];
+        if (memoryNodes === null) memoryNodes = [];
+    }
+    return storageAvailable;
+}
+
+export function isStorageAvailable(): boolean {
+    return checkStorageAvailable();
+}
+
+function safeGetItem(key: string): string | null {
+    if (!checkStorageAvailable()) return null;
+    try {
+        return window.localStorage.getItem(key);
+    } catch {
+        storageAvailable = false;
+        if (memoryProjects === null) memoryProjects = [];
+        if (memoryNodes === null) memoryNodes = [];
+        return null;
+    }
+}
+
+function safeSetItem(key: string, value: string): void {
+    if (!checkStorageAvailable()) {
+        if (key === PROJECTS_KEY) memoryProjects = JSON.parse(value) as Project[];
+        if (key === NODES_KEY) memoryNodes = JSON.parse(value) as Node[];
+        return;
+    }
+    try {
+        window.localStorage.setItem(key, value);
+    } catch (e) {
+        const err = e as DOMException;
+        if (err.name === "QuotaExceededError" || err.name === "NS_ERROR_DOM_QUOTA_REACHED") {
+            throw err;
+        }
+        storageAvailable = false;
+        if (memoryProjects === null) memoryProjects = [];
+        if (memoryNodes === null) memoryNodes = [];
+        if (key === PROJECTS_KEY) memoryProjects = JSON.parse(value) as Project[];
+        if (key === NODES_KEY) memoryNodes = JSON.parse(value) as Node[];
+    }
+}
+
+function safeRemoveItem(key: string): void {
+    if (!checkStorageAvailable()) return;
+    try {
+        window.localStorage.removeItem(key);
+    } catch {
+        storageAvailable = false;
+    }
+}
+
+function genId(): string {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+        return crypto.randomUUID();
+    }
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function nowIso(): string {
+    return new Date().toISOString();
+}
+
+function parseOrFallback<T>(raw: string | null, key: string): T[] {
+    if (raw === null) return [];
+    try {
+        const parsed = JSON.parse(raw) as T[];
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        console.warn(`[storage] corrupted ${key}, resetting`);
+        hadCorruption = true;
+        safeRemoveItem(key);
+        return [];
+    }
+}
+
+export function consumeCorruptionFlag(): boolean {
+    const v = hadCorruption;
+    hadCorruption = false;
+    return v;
+}
+
+export function loadProjects(): Project[] {
+    if (!checkStorageAvailable() && memoryProjects !== null) return [...memoryProjects];
+    const raw = safeGetItem(PROJECTS_KEY);
+    if (!checkStorageAvailable() && memoryProjects !== null) return [...memoryProjects];
+    const parsed = parseOrFallback<Project>(raw, PROJECTS_KEY);
+    if (memoryProjects !== null && !checkStorageAvailable()) return [...memoryProjects];
+    return parsed;
+}
+
+export function loadNodes(): Node[] {
+    if (!checkStorageAvailable() && memoryNodes !== null) return [...memoryNodes];
+    const raw = safeGetItem(NODES_KEY);
+    if (!checkStorageAvailable() && memoryNodes !== null) return [...memoryNodes];
+    const parsed = parseOrFallback<Node>(raw, NODES_KEY);
+    return parsed;
+}
+
+export function saveProjects(projects: Project[]): void {
+    safeSetItem(PROJECTS_KEY, JSON.stringify(projects));
+    if (memoryProjects !== null) memoryProjects = [...projects];
+}
+
+export function saveNodes(nodes: Node[]): void {
+    safeSetItem(NODES_KEY, JSON.stringify(nodes));
+    if (memoryNodes !== null) memoryNodes = [...nodes];
+}
+
+export function getProjectsSortedByUpdatedAt(): Project[] {
+    const projects = loadProjects();
+    return [...projects].sort((a, b) => {
+        const diff = Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
+        if (diff !== 0) return diff;
+        return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    });
+}
+
+export function isNameUnique(name: string, excludeId?: string): boolean {
+    return isNameUniquePure(name, loadProjects(), excludeId);
+}
+
+export function isNameUniquePure(name: string, projects: Project[], excludeId?: string): boolean {
+    const normalized = name.trim().toLowerCase();
+    return !projects.some((p) => p.id !== excludeId && p.name.trim().toLowerCase() === normalized);
+}
+
+export function validateProjectName(raw: string, excludeId?: string): string | null {
+    return validateProjectNamePure(raw, loadProjects(), excludeId);
+}
+
+export function validateProjectNamePure(raw: string, projects: Project[], excludeId?: string): string | null {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return "Name is required.";
+    if (trimmed.length > 40) return "Name must be 40 characters or less.";
+    if (!isNameUniquePure(trimmed, projects, excludeId)) return "A project with this name already exists.";
+    return null;
+}
+
+export function getNodeCountForProjectPure(nodes: Node[], projectId: string): number {
+    return nodes.filter((n) => n.projectId === projectId).length;
+}
+
+export function createProject(name: string): Project {
+    const trimmed = name.trim();
+    const err = validateProjectName(trimmed);
+    if (err) throw new Error(err);
+
+    const id = genId();
+    const rootId = genId();
+    const now = nowIso();
+    const project: Project = {
+        id,
+        name: trimmed,
+        rootNodeId: rootId,
+        createdAt: now,
+        updatedAt: now,
+        viewport: { x: 0, y: 0, zoom: 1 },
+    };
+    const rootNode: Node = {
+        id: rootId,
+        projectId: id,
+        parentId: null,
+        text: trimmed,
+        collapsed: false,
+        createdAt: now,
+        updatedAt: now,
+    };
+
+    const projects = loadProjects();
+    const nodes = loadNodes();
+    projects.push(project);
+    nodes.push(rootNode);
+    saveProjects(projects);
+    saveNodes(nodes);
+    return project;
+}
+
+export function renameProject(id: string, newName: string): Project {
+    const trimmed = newName.trim();
+    const err = validateProjectName(trimmed, id);
+    if (err) throw new Error(err);
+
+    const projects = loadProjects();
+    const idx = projects.findIndex((p) => p.id === id);
+    if (idx === -1) throw new Error("Project not found.");
+
+    const oldName = projects[idx].name;
+    const now = nowIso();
+    projects[idx] = { ...projects[idx], name: trimmed, updatedAt: now };
+    saveProjects(projects);
+
+    const nodes = loadNodes();
+    const rootIdx = nodes.findIndex((n) => n.id === projects[idx].rootNodeId);
+    if (rootIdx !== -1 && nodes[rootIdx].text === oldName) {
+        nodes[rootIdx] = { ...nodes[rootIdx], text: trimmed, updatedAt: now };
+        saveNodes(nodes);
+    }
+
+    return projects[idx];
+}
+
+export function deleteProject(id: string): void {
+    const projects = loadProjects();
+    const nodes = loadNodes();
+    const filteredProjects = projects.filter((p) => p.id !== id);
+    const filteredNodes = nodes.filter((n) => n.projectId !== id);
+    saveProjects(filteredProjects);
+    saveNodes(filteredNodes);
+}
+
+export function getNodeCountForProject(projectId: string): number {
+    return loadNodes().filter((n) => n.projectId === projectId).length;
+}
+
+// Test-only helper to reset in-memory state and storage keys
+export function __resetForTests(): void {
+    memoryProjects = null;
+    memoryNodes = null;
+    storageAvailable = null;
+    hadCorruption = false;
+    try {
+        window.localStorage.removeItem(PROJECTS_KEY);
+        window.localStorage.removeItem(NODES_KEY);
+    } catch {
+        // ignore
+    }
+}
