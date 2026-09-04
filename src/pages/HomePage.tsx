@@ -1,20 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-    Alert,
-    Button,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogContentText,
-    DialogTitle,
-    IconButton,
-    Menu,
-    MenuItem,
-    Snackbar,
-    TextField,
-} from "@mui/material";
+import { Alert, Button, Snackbar } from "@mui/material";
 import AppHeader from "../components/layout/AppHeader";
+import ConfirmDeleteDialog from "../components/home/ConfirmDeleteDialog";
+import CreateProjectDialog from "../components/home/CreateProjectDialog";
+import HomeEmptyState from "../components/home/HomeEmptyState";
+import ProjectGrid from "../components/home/ProjectGrid";
+import ProjectMenu from "../components/home/ProjectMenu";
+import RenameProjectDialog from "../components/home/RenameProjectDialog";
+import { PILL_SX } from "../components/home/pillSx";
 import {
     consumeCorruptionFlag,
     createProject,
@@ -28,18 +22,6 @@ import {
 import type { Project } from "../types/project";
 import "./HomePage.css";
 
-function formatDate(iso: string): string {
-    try {
-        return new Date(iso).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-        });
-    } catch {
-        return iso;
-    }
-}
-
 export default function HomePage() {
     const navigate = useNavigate();
     const [projects, setProjects] = useState<Project[]>(() => getProjectsSortedByUpdatedAt());
@@ -48,42 +30,18 @@ export default function HomePage() {
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
     const [menuProject, setMenuProject] = useState<Project | null>(null);
     const [createOpen, setCreateOpen] = useState(false);
-    const [draftName, setDraftName] = useState("");
-    const [renameOpen, setRenameOpen] = useState(false);
     const [renameTarget, setRenameTarget] = useState<Project | null>(null);
-    const [renameDraft, setRenameDraft] = useState("");
     const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
     const [deleteNodeCount, setDeleteNodeCount] = useState(0);
     const [quotaError, setQuotaError] = useState<string | null>(null);
 
-    const validationError = validateProjectNamePure(draftName, projects);
-    const showError = validationError !== null && draftName.length > 0;
-    const helperText = showError ? validationError : `${draftName.length}/40`;
-    const isCreateDisabled = validationError !== null;
-
-    const renameError = renameTarget ? validateProjectNamePure(renameDraft, projects, renameTarget.id) : null;
-    const showRenameError = renameError !== null && renameDraft.length > 0;
-    const renameHelper = showRenameError ? renameError : `${renameDraft.length}/40`;
-    const isRenameDisabled = renameError !== null;
-
-    function openCreate() {
-        setDraftName("");
-        setCreateOpen(true);
-    }
-
-    function closeCreate() {
-        setCreateOpen(false);
-        setDraftName("");
-    }
-
-    function handleCreate() {
-        const trimmed = draftName.trim();
-        const err = validateProjectNamePure(trimmed, projects);
-        if (err) return;
+    function handleCreate(name: string): boolean {
+        const err = validateProjectNamePure(name, projects);
+        if (err) return false;
         try {
-            createProject(trimmed);
+            createProject(name);
             setProjects(getProjectsSortedByUpdatedAt());
-            closeCreate();
+            return true;
         } catch (e) {
             const errObj = e as DOMException;
             if (errObj.name === "QuotaExceededError" || errObj.name === "NS_ERROR_DOM_QUOTA_REACHED") {
@@ -93,33 +51,30 @@ export default function HomePage() {
             } else {
                 setQuotaError("Failed to create project.");
             }
+            return false;
         }
+    }
+
+    function openCreate() {
+        setCreateOpen(true);
     }
 
     function openRename(p: Project) {
         setRenameTarget(p);
-        setRenameDraft(p.name);
-        setRenameOpen(true);
     }
 
-    function closeRename() {
-        setRenameOpen(false);
-        setRenameTarget(null);
-        setRenameDraft("");
-    }
-
-    function handleRename() {
-        if (!renameTarget) return;
-        const trimmed = renameDraft.trim();
-        const err = validateProjectNamePure(trimmed, projects, renameTarget.id);
-        if (err) return;
+    function handleRename(name: string): boolean {
+        if (!renameTarget) return false;
+        const err = validateProjectNamePure(name, projects, renameTarget.id);
+        if (err) return false;
         try {
-            renameProject(renameTarget.id, trimmed);
+            renameProject(renameTarget.id, name);
             setProjects(getProjectsSortedByUpdatedAt());
-            closeRename();
+            return true;
         } catch (e) {
             if (e instanceof Error) setQuotaError(e.message);
             else setQuotaError("Failed to rename project.");
+            return false;
         }
     }
 
@@ -167,13 +122,7 @@ export default function HomePage() {
                         <p>Local to this browser · sorted newest first</p>
                     </div>
                     {!isEmpty && (
-                        <Button
-                            variant="contained"
-                            size="small"
-                            onClick={openCreate}
-                            aria-label="New project"
-                            sx={{ borderRadius: "999px", textTransform: "none" }}
-                        >
+                        <Button variant="contained" size="small" onClick={openCreate} aria-label="New project" sx={PILL_SX}>
                             + New project
                         </Button>
                     )}
@@ -192,196 +141,47 @@ export default function HomePage() {
                 )}
 
                 {isEmpty ? (
-                    <div className="home-empty">
-                        <div className="home-empty__icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                                <circle cx="12" cy="12" r="3.5" />
-                                <circle cx="6" cy="7" r="2" />
-                                <circle cx="18" cy="7" r="2" />
-                                <circle cx="6" cy="17" r="2" />
-                                <circle cx="18" cy="17" r="2" />
-                                <path d="M9 10.2L12 12M12 12l2.9-1.8M12 12l-3 3.2M12 12l3 3.2" />
-                            </svg>
-                        </div>
-                        <h2>No projects yet</h2>
-                        <p>Create your first mind map to get started.</p>
-                        <Button
-                            variant="contained"
-                            onClick={openCreate}
-                            aria-label="Create your first project"
-                            sx={{ borderRadius: "999px", textTransform: "none", mt: 1 }}
-                        >
-                            + New project
-                        </Button>
-                    </div>
+                    <HomeEmptyState onCreate={openCreate} />
                 ) : (
-                    <div className="home-grid">
-                        {projects.map((p) => (
-                            <div
-                                key={p.id}
-                                className="home-card"
-                                tabIndex={0}
-                                role="button"
-                                aria-label={`Open project ${p.name}`}
-                                onClick={() => navigateToProject(p.id)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                        e.preventDefault();
-                                        navigateToProject(p.id);
-                                    }
-                                }}
-                            >
-                                <div className="home-card__top">
-                                    <div className="home-card__name" title={p.name}>
-                                        {p.name}
-                                    </div>
-                                    <IconButton
-                                        size="small"
-                                        aria-label={`Actions for ${p.name}`}
-                                        aria-haspopup="menu"
-                                        aria-expanded={Boolean(menuAnchor && menuProject?.id === p.id)}
-                                        onClick={(e) => openMenu(e, p)}
-                                        sx={{ minWidth: 44, minHeight: 44 }}
-                                    >
-                                        ⋯
-                                    </IconButton>
-                                </div>
-                                <div className="home-card__meta">Edited {formatDate(p.updatedAt)}</div>
-                            </div>
-                        ))}
-                    </div>
+                    <ProjectGrid
+                        projects={projects}
+                        openMenuId={menuAnchor ? (menuProject?.id ?? null) : null}
+                        onOpen={navigateToProject}
+                        onMenu={openMenu}
+                    />
                 )}
 
-                <Menu
-                    anchorEl={menuAnchor}
-                    open={Boolean(menuAnchor)}
+                <ProjectMenu
+                    anchor={menuAnchor}
+                    project={menuProject}
                     onClose={closeMenu}
-                    anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                    transformOrigin={{ vertical: "top", horizontal: "right" }}
-                >
-                    <MenuItem
-                        onClick={() => {
-                            const p = menuProject;
-                            closeMenu();
-                            if (p) navigateToProject(p.id);
-                        }}
-                    >
-                        Open
-                    </MenuItem>
-                    <MenuItem
-                        onClick={() => {
-                            const p = menuProject;
-                            closeMenu();
-                            if (p) openRename(p);
-                        }}
-                    >
-                        Rename
-                    </MenuItem>
-                    <MenuItem
-                        onClick={() => {
-                            const p = menuProject;
-                            closeMenu();
-                            if (p) openDelete(p);
-                        }}
-                        sx={{ color: "var(--danger)" }}
-                    >
-                        Delete
-                    </MenuItem>
-                </Menu>
+                    onOpen={navigateToProject}
+                    onRename={openRename}
+                    onDelete={openDelete}
+                />
 
-                <Dialog open={createOpen} onClose={closeCreate} maxWidth="xs" fullWidth>
-                    <DialogTitle>Create project</DialogTitle>
-                    <DialogContent>
-                        <TextField
-                            autoFocus
-                            fullWidth
-                            margin="dense"
-                            label="Project name"
-                            placeholder="e.g. Photosynthesis"
-                            value={draftName}
-                            onChange={(e) => setDraftName(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter" && !isCreateDisabled) handleCreate();
-                            }}
-                            error={showError}
-                            helperText={helperText}
-                            slotProps={{ htmlInput: { "aria-label": "Project name" } }}
-                        />
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={closeCreate} sx={{ borderRadius: "999px", textTransform: "none" }}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="contained"
-                            onClick={handleCreate}
-                            disabled={isCreateDisabled}
-                            aria-label="Create project"
-                            sx={{ borderRadius: "999px", textTransform: "none" }}
-                        >
-                            Create
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                <CreateProjectDialog
+                    open={createOpen}
+                    projects={projects}
+                    onClose={() => setCreateOpen(false)}
+                    onSubmit={handleCreate}
+                />
 
-                <Dialog open={renameOpen} onClose={closeRename} maxWidth="xs" fullWidth>
-                    <DialogTitle>Rename project</DialogTitle>
-                    <DialogContent>
-                        <TextField
-                            autoFocus
-                            fullWidth
-                            margin="dense"
-                            label="Project name"
-                            value={renameDraft}
-                            onChange={(e) => setRenameDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter" && !isRenameDisabled) handleRename();
-                            }}
-                            error={showRenameError}
-                            helperText={renameHelper}
-                            slotProps={{ htmlInput: { "aria-label": "New project name" } }}
-                        />
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={closeRename} sx={{ borderRadius: "999px", textTransform: "none" }}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="contained"
-                            onClick={handleRename}
-                            disabled={isRenameDisabled}
-                            aria-label="Save rename"
-                            sx={{ borderRadius: "999px", textTransform: "none" }}
-                        >
-                            Save
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                <RenameProjectDialog
+                    open={Boolean(renameTarget)}
+                    projects={projects}
+                    initialName={renameTarget?.name ?? ""}
+                    excludeId={renameTarget?.id ?? null}
+                    onClose={() => setRenameTarget(null)}
+                    onSubmit={handleRename}
+                />
 
-                <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
-                    <DialogTitle>Delete project?</DialogTitle>
-                    <DialogContent>
-                        <DialogContentText>
-                            {deleteTarget
-                                ? `Delete "${deleteTarget.name}"? This will remove ${deleteNodeCount} node(s). This cannot be undone.`
-                                : ""}
-                        </DialogContentText>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setDeleteTarget(null)} sx={{ borderRadius: "999px", textTransform: "none" }}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="contained"
-                            color="error"
-                            onClick={handleDelete}
-                            aria-label="Confirm delete"
-                            sx={{ borderRadius: "999px", textTransform: "none" }}
-                        >
-                            Delete
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                <ConfirmDeleteDialog
+                    target={deleteTarget}
+                    nodeCount={deleteNodeCount}
+                    onClose={() => setDeleteTarget(null)}
+                    onConfirm={handleDelete}
+                />
 
                 <Snackbar
                     open={Boolean(quotaError)}
