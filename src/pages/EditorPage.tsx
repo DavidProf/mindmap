@@ -4,6 +4,7 @@ import AppHeader from "../components/layout/AppHeader";
 import TreeCanvas from "../components/canvas/TreeCanvas";
 import { loadProjects, loadNodes, addChildNode, updateNodeText, setNodeCollapsed, deleteNodeSubtree } from "../lib/storage";
 import { computeLayout } from "../lib/layout";
+import { exportMapAsPng } from "../lib/exportPng";
 import type { Project } from "../types/project";
 import type { Node, NodeSide } from "../types/node";
 import "./EditorPage.css";
@@ -40,6 +41,7 @@ function EditorCanvas({ project }: { project: Project }) {
     const [nodes, setNodes] = useState<Node[]>(() => loadNodes().filter((n) => n.projectId === project.id));
     const [recenterSignal, setRecenterSignal] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    const [exporting, setExporting] = useState(false);
 
     function refreshNodes() {
         setNodes(loadNodes().filter((n) => n.projectId === project.id));
@@ -119,9 +121,35 @@ function EditorCanvas({ project }: { project: Project }) {
 
     const layout = computeLayout(nodes, project.rootNodeId);
 
+    async function handleExport() {
+        if (exporting) return;
+        setExporting(true);
+        try {
+            const visibleNodes = nodes.filter((n) => layout.positions.has(n.id));
+            await exportMapAsPng({
+                projectName: project.name,
+                nodes: visibleNodes,
+                positions: layout.positions,
+                edges: layout.edges,
+                bounds: layout.bounds,
+            });
+            setError(null);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Could not export PNG.");
+        } finally {
+            setExporting(false);
+        }
+    }
+
     return (
         <>
-            <AppHeader variant="editor" projectName={project.name} onRecenter={() => setRecenterSignal((n) => n + 1)} />
+            <AppHeader
+                variant="editor"
+                projectName={project.name}
+                onRecenter={() => setRecenterSignal((n) => n + 1)}
+                onExport={handleExport}
+                exporting={exporting}
+            />
             <main className="editor-canvas">
                 {error && (
                     <div className="editor-error" role="alert">

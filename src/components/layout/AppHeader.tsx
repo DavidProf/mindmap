@@ -6,9 +6,11 @@ type AppHeaderProps = {
     variant?: "home" | "editor";
     projectName?: string;
     onRecenter?: () => void;
+    onExport?: () => void;
+    exporting?: boolean;
 };
 
-export default function AppHeader({ variant = "home", projectName, onRecenter }: AppHeaderProps) {
+export default function AppHeader({ variant = "home", projectName, onRecenter, onExport, exporting }: AppHeaderProps) {
     if (variant === "editor") {
         return (
             <header className="app-header app-header--editor">
@@ -36,8 +38,15 @@ export default function AppHeader({ variant = "home", projectName, onRecenter }:
                     >
                         ↺ Re-center
                     </Button>
-                    <Button variant="contained" size="small" disabled sx={{ borderRadius: "999px" }}>
-                        ⤓ Export PNG
+                    <Button
+                        variant="contained"
+                        size="small"
+                        onClick={onExport}
+                        disabled={!onExport || exporting}
+                        aria-label="Export PNG"
+                        sx={{ borderRadius: "999px" }}
+                    >
+                        {exporting ? "Exporting..." : "⤓ Export PNG"}
                     </Button>
                 </div>
             </header>
