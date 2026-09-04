@@ -1,6 +1,6 @@
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from "@mui/material";
 import type { Project } from "../../types/project";
-import { PILL_SX } from "./pillSx";
+import { PILL_SX } from "../pillSx";
 
 type Props = {
     target: Project | null;

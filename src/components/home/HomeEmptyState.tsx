@@ -1,5 +1,5 @@
 import { Button } from "@mui/material";
-import { PILL_SX } from "./pillSx";
+import { PILL_SX } from "../pillSx";
 
 type Props = {
     onCreate: () => void;

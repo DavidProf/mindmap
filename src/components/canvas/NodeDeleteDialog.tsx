@@ -4,6 +4,7 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
+import { PILL_SX } from "../pillSx";
 
 export type NodeDeleteTarget = { nodeId: string; text: string; count: number };
 
@@ -25,7 +26,7 @@ export default function NodeDeleteDialog({ target, onCancel, onConfirm }: NodeDe
                 </DialogContentText>
             </DialogContent>
             <DialogActions>
-                <Button onClick={onCancel} sx={{ borderRadius: "999px", textTransform: "none" }}>
+                <Button onClick={onCancel} sx={PILL_SX}>
                     Cancel
                 </Button>
                 <Button
@@ -33,7 +34,7 @@ export default function NodeDeleteDialog({ target, onCancel, onConfirm }: NodeDe
                     color="error"
                     onClick={onConfirm}
                     aria-label="Confirm delete"
-                    sx={{ borderRadius: "999px", textTransform: "none" }}
+                    sx={PILL_SX}
                 >
                     Delete
                 </Button>

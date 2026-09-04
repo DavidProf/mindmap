@@ -8,7 +8,7 @@ import HomeEmptyState from "../components/home/HomeEmptyState";
 import ProjectGrid from "../components/home/ProjectGrid";
 import ProjectMenu from "../components/home/ProjectMenu";
 import RenameProjectDialog from "../components/home/RenameProjectDialog";
-import { PILL_SX } from "../components/home/pillSx";
+import { PILL_SX } from "../components/pillSx";
 import {
     consumeCorruptionFlag,
     createProject,

@@ -1,5 +1,6 @@
 import { Button } from "@mui/material";
 import { Link } from "react-router-dom";
+import { PILL_SX } from "../pillSx";
 import "./AppHeader.css";
 
 type AppHeaderProps = {
@@ -34,7 +35,7 @@ export default function AppHeader({ variant = "home", projectName, onRecenter, o
                         onClick={onRecenter}
                         disabled={!onRecenter}
                         aria-label="Re-center"
-                        sx={{ borderRadius: "999px", textTransform: "none" }}
+                        sx={PILL_SX}
                     >
                         ↺ Re-center
                     </Button>
@@ -44,7 +45,7 @@ export default function AppHeader({ variant = "home", projectName, onRecenter, o
                         onClick={onExport}
                         disabled={!onExport || exporting}
                         aria-label="Export PNG"
-                        sx={{ borderRadius: "999px" }}
+                        sx={PILL_SX}
                     >
                         {exporting ? "Exporting..." : "⤓ Export PNG"}
                     </Button>

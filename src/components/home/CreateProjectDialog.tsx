@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from "@mui/material";
 import { validateProjectNamePure } from "../../lib/storage";
 import type { Project } from "../../types/project";
-import { PILL_SX } from "./pillSx";
+import { PILL_SX } from "../pillSx";
 
 type Props = {
     open: boolean;
