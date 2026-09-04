@@ -1,6 +1,6 @@
 # Mindmap - Project Overview
 
-<!-- blueprint:source-hash 3ba51534774f81fc39acdef3c389beab4a5f41e03aa58293c98ff19bd54d74b9 -->
+<!-- blueprint:source-hash d9a689f401fec71ce5784a25a88ee983ff9a61c3a1e227f2dac4d142d93cde46 -->
 
 > Calm, mobile-first mind-map app where a centered root grows into a strict auto-laid-out tree that can be collapsed and exported as PNG - local-only, no login, Excalidraw-minimal on GitHub Pages.
 
@@ -28,8 +28,8 @@ In `build-plan.md` order:
 2. **Home projects management** - project list newest-first with create, rename, delete, empty state, local persistence. *(done)*
 3. **Tree canvas with auto-layout** - centered root, strict-tree auto-layout, pan plus pinch and wheel zoom, re-center, persisted viewport. *(done - headline feature)*
 4. **Node add and edit** - redundant plus buttons around node (hover on desktop, tap on mobile) to add a child and focus inline editor, char-limit enforcement. *(done)*
-5. **Context menu and branch controls** - right-click and long-press menu for Edit, Delete, Collapse-Expand; subtree delete confirm; persisted collapsed state with reflow.
-6. **PNG export** - client-side whole-tree PNG with light background, export button on editor.
+5. **Context menu and branch controls** - right-click and long-press menu for Edit, Delete, Collapse-Expand; subtree delete confirm; persisted collapsed state with reflow. *(done)*
+6. **PNG export** - client-side whole-tree PNG with light background, export button on editor. *(done)*
 7. **Deploy and polish** - Pages build config, SPA fallback, `lastEdited` timestamps, responsive and touch polish, storage and empty-map error handling.
 
 Post-MVP (deferred): dense text and media nodes, graph cross-links, undo and redo, home duplicate plus search plus JSON import and export, cloud sync and sharing, present mode, dark mode, keyboard nav, PDF and print, ads evaluation.
