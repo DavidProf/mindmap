@@ -78,7 +78,8 @@
 - Build: `npm run build` (`tsc -b` + `vite build`)
 - Preview: `npm run preview`
 - Lint: `npm run lint`
-- No tests or Verify command yet - see Testing and `AGENTS.md` Commands
+- Test: `npm test` (Vitest, single run); watch: `npm run test:watch`
+- No Verify command yet - see Testing and `AGENTS.md` Commands
 
 ## Testing
 

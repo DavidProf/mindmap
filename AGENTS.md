@@ -195,9 +195,8 @@ checks do not make the Blueprint unusable.
 - Build: `npm run build` (runs `tsc -b` + `vite build`)
 - Preview: `npm run preview` (serve production build locally)
 - Lint: `npm run lint`
-
-No test command is configured yet. Run `/tests` or `$tests` to add unit testing
-and update this section with the real test command.
+- Test: `npm test` (Vitest, single run)
+- Test watch: `npm run test:watch` (Vitest, reruns on change)
 
 No `Verify` command is configured yet. Run `/ci` or `$ci` to define one combined
 verification command and matching GitHub checks when you want automatic verification.
