@@ -2,14 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import type { Node, NodeSide } from "../../types/node";
 import type { Position } from "../../lib/layout";
 import type { Viewport } from "../../types/project";
-import { clampZoom, DEFAULT_VIEWPORT, getViewport, MIN_ZOOM, setViewport } from "../../lib/storage";
+import { clampZoom, countSubtreeNodesPure, DEFAULT_VIEWPORT, getSubtreeCountsPure, getViewport, MIN_ZOOM, setViewport } from "../../lib/storage";
 import NodeCircle from "./NodeCircle";
+import NodeContextMenu from "./NodeContextMenu";
+import type { NodeMenuState } from "./NodeContextMenu";
+import NodeDeleteDialog from "./NodeDeleteDialog";
+import type { NodeDeleteTarget } from "./NodeDeleteDialog";
 import "./TreeCanvas.css";
 
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number; width: number; height: number };
 
 type TreeCanvasProps = {
     projectId: string;
+    rootNodeId: string;
     nodes: Node[];
     positions: Map<string, Position>;
     edges: { from: string; to: string }[];
@@ -17,13 +22,17 @@ type TreeCanvasProps = {
     recenterSignal?: number;
     onAddChild?: (parentId: string, text: string, side: NodeSide) => Node | null;
     onUpdateText?: (nodeId: string, text: string) => Node | null;
+    onToggleCollapsed?: (nodeId: string) => Node | null;
+    onDeleteSubtree?: (nodeId: string) => { deletedIds: string[] } | null;
 };
 
-export default function TreeCanvas({ projectId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText }: TreeCanvasProps) {
+export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [viewport, setViewportState] = useState<Viewport>(() => getViewport(projectId) ?? { ...DEFAULT_VIEWPORT });
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [menu, setMenu] = useState<NodeMenuState | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<NodeDeleteTarget | null>(null);
     const [animate, setAnimate] = useState(false);
     const [dragging, setDragging] = useState(false);
     const dragRef = useRef<{ sx: number; sy: number; vx: number; vy: number } | null>(null);
@@ -90,7 +99,19 @@ export default function TreeCanvas({ projectId, nodes, positions, edges, bounds,
         return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
     }
 
+    function isOverlayEvent(e: React.SyntheticEvent): boolean {
+        // MUI Menu/Dialog render into body portals, but React events from a
+        // portal still bubble through this component's handlers. A press
+        // inside an open overlay must not dismiss it or start a canvas drag,
+        // or the menu item unmounts before its click fires.
+        const el = e.target as Element | null;
+        if (!el || typeof el.closest !== "function") return false;
+        return el.closest('[role="menu"], [role="dialog"]') !== null;
+    }
+
     function handleWheel(e: React.WheelEvent) {
+        if (isOverlayEvent(e)) return;
+        closeMenu();
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
         const cx = e.clientX - rect.left;
@@ -114,6 +135,8 @@ export default function TreeCanvas({ projectId, nodes, positions, edges, bounds,
     }
 
     function handleMouseDown(e: React.MouseEvent) {
+        if (isOverlayEvent(e)) return;
+        closeMenu();
         if (e.button !== 0) return;
         if (e.target === e.currentTarget) setSelectedId(null);
         e.preventDefault();
@@ -141,6 +164,8 @@ export default function TreeCanvas({ projectId, nodes, positions, edges, bounds,
     }
 
     function handleTouchStart(e: React.TouchEvent) {
+        if (isOverlayEvent(e)) return;
+        closeMenu();
         if (e.target === e.currentTarget) setSelectedId(null);
         if (e.touches.length === 1) {
             const t = e.touches[0];
@@ -231,6 +256,67 @@ export default function TreeCanvas({ projectId, nodes, positions, edges, bounds,
         setEditingId(id);
     }
 
+    function closeMenu(focusNodeId?: string) {
+        setMenu((open) => (open === null ? open : null));
+        if (focusNodeId) focusCircle(focusNodeId);
+    }
+
+    function handleNodeContextMenu(id: string, x: number, y: number) {
+        commitPendingEdit(id);
+        setSelectedId(id);
+        setMenu({ x, y, nodeId: id });
+    }
+
+    function handleMenuEdit() {
+        const target = menu?.nodeId;
+        closeMenu();
+        if (target) handleEditStart(target);
+    }
+
+    function handleMenuToggleCollapse() {
+        const target = menu?.nodeId;
+        closeMenu(target);
+        if (target) onToggleCollapsed?.(target);
+    }
+
+    function handleMenuDelete() {
+        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
+        closeMenu();
+        if (!target || target.id === rootNodeId) return;
+        setDeleteTarget({
+            nodeId: target.id,
+            text: target.text,
+            count: countSubtreeNodesPure(nodes, target.id),
+        });
+    }
+
+    function handleCancelDelete() {
+        const target = deleteTarget;
+        setDeleteTarget(null);
+        if (target) focusCircle(target.nodeId);
+    }
+
+    function handleConfirmDelete() {
+        const target = deleteTarget;
+        if (!target) return;
+        const parentId = nodes.find((n) => n.id === target.nodeId)?.parentId ?? null;
+        const res = onDeleteSubtree?.(target.nodeId);
+        setDeleteTarget(null);
+        if (res) {
+            // The selection and editor must not point into a removed subtree.
+            if (selectedId !== null && res.deletedIds.includes(selectedId)) setSelectedId(null);
+            if (editingId !== null && res.deletedIds.includes(editingId)) setEditingId(null);
+            // Move focus out of the removed subtree: parent circle, else canvas.
+            requestAnimationFrame(() => {
+                if (parentId && document.querySelector(`[data-node-id="${parentId}"] .node-circle`)) {
+                    focusCircle(parentId);
+                } else {
+                    containerRef.current?.focus?.();
+                }
+            });
+        }
+    }
+
     function commitPendingEdit(exceptId: string) {
         // Canvas mousedown prevents default, so clicking another node never
         // moves focus and the open editor would stay uncommitted. Blur it
@@ -269,11 +355,17 @@ export default function TreeCanvas({ projectId, nodes, positions, edges, bounds,
         (el as HTMLElement | null)?.focus?.();
     }
 
+    const menuTarget = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
+    const menuHasChildren = menuTarget ? nodes.some((n) => n.parentId === menuTarget.id) : false;
+    // Single traversal for all badge counts instead of one per collapsed node.
+    const subtreeCounts = getSubtreeCountsPure(nodes);
+
     return (
         <div
             ref={containerRef}
             className={`tree-canvas${dragging ? " tree-canvas--dragging" : ""}`}
             data-testid="tree-canvas"
+            tabIndex={-1}
             onWheel={handleWheel}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
@@ -328,10 +420,27 @@ export default function TreeCanvas({ projectId, nodes, positions, edges, bounds,
                             onEditStart={handleEditStart}
                             onCommitText={handleCommitText}
                             onCancelEdit={handleCancelEdit}
+                            onContextMenu={handleNodeContextMenu}
+                            collapsed={n.collapsed}
+                            hiddenCount={n.collapsed ? (subtreeCounts.get(n.id) ?? 1) - 1 : 0}
                         />
                     );
                 })}
             </div>
+            {menuTarget && (
+                <NodeContextMenu
+                    menu={menu}
+                    text={menuTarget.text}
+                    collapsed={menuTarget.collapsed}
+                    hasChildren={menuHasChildren}
+                    isRoot={menuTarget.id === rootNodeId}
+                    onClose={() => closeMenu(menu?.nodeId)}
+                    onEdit={handleMenuEdit}
+                    onToggleCollapse={handleMenuToggleCollapse}
+                    onDelete={handleMenuDelete}
+                />
+            )}
+            <NodeDeleteDialog target={deleteTarget} onCancel={handleCancelDelete} onConfirm={handleConfirmDelete} />
         </div>
     );
 }

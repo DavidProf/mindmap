@@ -53,6 +53,10 @@ export default function NodeEditor({ nodeId, initialText, onCommit, onCancel }: 
                 onMouseDown={(e) => e.stopPropagation()}
                 onTouchStart={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
+                onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }}
                 onBlur={() => finish(true)}
             />
             <span className="node-editor__counter" aria-hidden="true">

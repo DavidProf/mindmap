@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import AppHeader from "../components/layout/AppHeader";
 import TreeCanvas from "../components/canvas/TreeCanvas";
-import { loadProjects, loadNodes, addChildNode, updateNodeText, setNodeCollapsed } from "../lib/storage";
+import { loadProjects, loadNodes, addChildNode, updateNodeText, setNodeCollapsed, deleteNodeSubtree } from "../lib/storage";
 import { computeLayout } from "../lib/layout";
 import type { Project } from "../types/project";
 import type { Node, NodeSide } from "../types/node";
@@ -73,6 +73,32 @@ function EditorCanvas({ project }: { project: Project }) {
         }
     }
 
+    function handleToggleCollapsed(nodeId: string): Node | null {
+        try {
+            const node = nodes.find((n) => n.id === nodeId);
+            if (!node) return null;
+            const updated = setNodeCollapsed(nodeId, !node.collapsed);
+            refreshNodes();
+            setError(null);
+            return updated;
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Could not collapse node.");
+            return null;
+        }
+    }
+
+    function handleDeleteSubtree(nodeId: string): { deletedIds: string[] } | null {
+        try {
+            const res = deleteNodeSubtree(nodeId);
+            refreshNodes();
+            setError(null);
+            return res;
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Could not delete node.");
+            return null;
+        }
+    }
+
     const rootNode = nodes.find((n) => n.id === project.rootNodeId);
 
     if (nodes.length === 0 || !rootNode) {
@@ -107,6 +133,7 @@ function EditorCanvas({ project }: { project: Project }) {
                 )}
                 <TreeCanvas
                     projectId={project.id}
+                    rootNodeId={project.rootNodeId}
                     nodes={nodes}
                     positions={layout.positions}
                     edges={layout.edges}
@@ -114,6 +141,8 @@ function EditorCanvas({ project }: { project: Project }) {
                     recenterSignal={recenterSignal}
                     onAddChild={handleAddChild}
                     onUpdateText={handleUpdateText}
+                    onToggleCollapsed={handleToggleCollapsed}
+                    onDeleteSubtree={handleDeleteSubtree}
                 />
             </main>
         </>

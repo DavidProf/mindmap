@@ -334,6 +334,88 @@ export function setNodeCollapsed(nodeId: string, collapsed: boolean): Node {
     return updated;
 }
 
+export function getSubtreeIdsPure(nodes: Node[], nodeId: string): string[] {
+    const target = nodes.find((n) => n.id === nodeId);
+    if (!target) return [];
+    const childrenMap = new Map<string, Node[]>();
+    for (const n of nodes) {
+        if (n.parentId === null || n.projectId !== target.projectId) continue;
+        const arr = childrenMap.get(n.parentId);
+        if (arr) arr.push(n);
+        else childrenMap.set(n.parentId, [n]);
+    }
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const stack: string[] = [nodeId];
+    while (stack.length > 0) {
+        const id = stack.pop()!;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        ids.push(id);
+        const children = childrenMap.get(id) ?? [];
+        for (let i = children.length - 1; i >= 0; i--) stack.push(children[i].id);
+    }
+    return ids;
+}
+
+export function countSubtreeNodesPure(nodes: Node[], nodeId: string): number {
+    return getSubtreeIdsPure(nodes, nodeId).length;
+}
+
+export function getSubtreeCountsPure(nodes: Node[]): Map<string, number> {
+    const nodeById = new Map<string, Node>();
+    for (const n of nodes) nodeById.set(n.id, n);
+    const childrenMap = new Map<string, Node[]>();
+    for (const n of nodes) {
+        if (n.parentId === null) continue;
+        const arr = childrenMap.get(n.parentId);
+        if (arr) arr.push(n);
+        else childrenMap.set(n.parentId, [n]);
+    }
+    const counts = new Map<string, number>();
+    const visiting = new Set<string>();
+    function count(id: string): number {
+        if (counts.has(id)) return counts.get(id)!;
+        if (visiting.has(id)) return 0;
+        const node = nodeById.get(id);
+        if (!node) {
+            counts.set(id, 0);
+            return 0;
+        }
+        visiting.add(id);
+        const children = childrenMap.get(id) ?? [];
+        // Keep subtree within the same project.
+        let total = 1;
+        for (const child of children) {
+            if (child.projectId !== node.projectId) continue;
+            total += count(child.id);
+        }
+        visiting.delete(id);
+        counts.set(id, total);
+        return total;
+    }
+    for (const n of nodes) count(n.id);
+    return counts;
+}
+
+export function deleteNodeSubtree(nodeId: string): { deletedIds: string[] } {
+    const nodes = loadNodes();
+    const target = nodes.find((n) => n.id === nodeId);
+    if (!target) throw new Error("Node not found.");
+    if (target.parentId === null) throw new Error("Cannot delete the root node.");
+
+    const ids = new Set(getSubtreeIdsPure(nodes, nodeId));
+    saveNodes(nodes.filter((n) => !ids.has(n.id)));
+
+    const projects = loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === target.projectId);
+    if (pIdx !== -1) {
+        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+        saveProjects(projects);
+    }
+    return { deletedIds: [...ids] };
+}
+
 export function clampZoom(z: number): number {
     if (!Number.isFinite(z)) return DEFAULT_VIEWPORT.zoom;
     return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
