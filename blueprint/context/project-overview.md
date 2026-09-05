@@ -1,6 +1,6 @@
 # Mindmap - Project Overview
 
-<!-- blueprint:source-hash d74a629e9ae06e2043b3789dcff37f36cc30c23804e129a4a12d660e360237c3 -->
+<!-- blueprint:source-hash 341b2a48a5de57f0ee5d2ffb8f727b52f64b6d8632151ca71fdb5868710a5dc1 -->
 
 > Calm, mobile-first mind-map app where a centered root grows into a strict auto-laid-out tree that can be collapsed and exported as PNG - local-only, no login, Excalidraw-minimal on GitHub Pages.
 
@@ -33,7 +33,17 @@ In `build-plan.md` order (MVP 1-7 plus item 8 shipped):
 7. **Deploy and polish** - Pages build config with deploy workflow, SPA-safe routing locked, `lastEdited` timestamps, responsive and touch polish, storage and empty-map error handling, zoom % indicator. *(done)*
 8. **Node text limit 30** - tighten node text from 60 to 30 chars with validation, counter, and tests; over-limit nodes display as-is until edited. *(done)*
 
-Post-MVP (next, in order): design polish pass, IndexedDB storage, then dense text and media nodes, graph cross-links, undo and redo, home duplicate plus search plus JSON import and export, cloud sync and sharing, presentation and a11y polish.
+9. **Design polish pass** - palette/typography tokens, collapse badge and empty-state feel; add badges smaller with larger offset and auto-hide on click-out/deselect, collapse badge click toggles expand, node rename commits on blur, project rename inline like node (no dialog).
+10. **Tree layout quality pass** - fix misleading placements (B→C[left] reading as root child; A→D[bottom] edge crossing B/C edges); subtree separation, edge routing, parent-proximity.
+11. **PNG export preview** - whole-tree fitted preview with confirm/download plus cancel.
+12. **IndexedDB storage** - IndexedDB primary with localStorage fallback plus unavailable warning.
+13. **Dense text and media nodes** - rectangle nodes for images/video/links and expanded text.
+14. **Graph cross-links** - arbitrary links between nodes (breaks strict tree).
+15. **Undo and redo** - in-memory stack for add/delete/edit/collapse.
+16. **Home enhancements** - duplicate project, search/filter/sort, JSON import/export.
+17. **Cloud sync and sharing** - auth plus synced storage plus shareable links.
+18. **Presentation and a11y polish** - present mode, dark mode, keyboard nav (incl. Select + Del to delete selected node), PDF/print, ads evaluation.
+19. **Multi-select nodes** - multi-select with bulk actions; sequenced after item 12.
 
 ## Data model
 

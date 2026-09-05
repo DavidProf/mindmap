@@ -51,14 +51,17 @@
 
 ### Post-MVP ideas (agreed to keep, not in MVP):
 - Node text limit 30 (tighten from shipped 60; existing over-limit nodes display as-is until edited)
-- Design polish pass (palette/typography tokens, collapse badge and empty-state feel)
+- Design polish pass (palette/typography tokens, collapse badge and empty-state feel; interaction refinements: smaller add badges with larger offset + auto-hide on click-out/deselect, collapse badge click toggles expand, node rename commits on blur, project rename inline like node instead of dialog)
+- Tree layout quality pass (fix misleading placements: B→C[left] reading as root child; A→D[bottom] edge crossing B/C edges; improve subtree separation, edge routing, parent-proximity)
+- PNG export preview (whole-tree fitted preview with confirm/download + cancel before saving)
 - IndexedDB storage (primary, with localStorage fallback for environments without it, notably mobile-framework WebViews)
 - Dense text node, image/video/rectangle nodes, link nodes
 - Graph cross-links
 - Undo/redo stack
 - Duplicate project, search/filter/sort, JSON import/export
 - Cloud sync + auth (Firebase/Supabase etc.), shareable links
-- Dark mode, keyboard shortcuts, improved a11y, PDF/print, present mode, ads
+- Dark mode, keyboard shortcuts (incl. Select + Del to delete selected node), improved a11y, PDF/print, present mode, ads
+- Multi-select nodes with bulk actions (sequenced after IndexedDB)
 
 ## 4. Data - What are we storing?
 
