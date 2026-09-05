@@ -8,7 +8,7 @@
 - [x] 4. **Node add & edit interactions** — multiple plus buttons around node (hover on desktop / tap on mobile, large touch targets) to add child + auto-focus inline editor; inline edit with limit enforcement
 - [x] 5. **Context menu & branch controls** — right-click / long-press menu for Edit/Delete/Collapse-Expand, subtree delete with confirm (delete count), collapsed badge/indicator, persisted collapsed state with layout reflow
 - [x] 6. **PNG export** — client-side export of the map as PNG (whole tree fitted, light background), export button on editor
-- [ ] 7. **Deploy & polish** — GitHub Pages build config, SPA 404 fallback, lastEdited timestamps, responsive/touch polish, error handling for storage/empty maps, zoom % indicator
+- [x] 7. **Deploy & polish** — GitHub Pages build config, SPA 404 fallback, lastEdited timestamps, responsive/touch polish, error handling for storage/empty maps, zoom % indicator
 
 ## Post-MVP
 

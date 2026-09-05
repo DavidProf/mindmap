@@ -22,4 +22,14 @@ test("smoke: home loads, project creation opens editor canvas", async ({ page })
     await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
     await expect(page.locator(".editor-canvas")).toBeVisible();
     await expect(page.getByText(projectName).first()).toBeVisible();
+    await expect(page.getByTestId("zoom-badge")).toBeVisible();
+    await expect(page.getByTestId("zoom-badge")).toHaveText(/^\d+%$/);
+    await page.getByRole("button", { name: "Re-center" }).click();
+    await expect(page.getByTestId("zoom-badge")).toHaveText(/^\d+%$/);
+});
+
+test("smoke: unknown project shows not-found with back link", async ({ page }) => {
+    await page.goto("/#/project/does-not-exist");
+    await expect(page.getByRole("heading", { name: "Project not found" })).toBeVisible();
+    await expect(page.getByText("Back to projects").first()).toBeVisible();
 });

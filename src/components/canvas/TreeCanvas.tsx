@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Node, NodeSide } from "../../types/node";
 import type { Position } from "../../lib/layout";
 import { countSubtreeNodesPure, getSubtreeCountsPure } from "../../lib/storage";
+import { formatZoomPct } from "../../lib/zoom";
 import useViewport from "./useViewport";
 import type { CanvasBounds } from "./useViewport";
 import NodeCircle from "./NodeCircle";
@@ -268,6 +269,14 @@ export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, ed
                 />
             )}
             <NodeDeleteDialog target={deleteTarget} onCancel={handleCancelDelete} onConfirm={handleConfirmDelete} />
+            <div
+                className="tree-zoom-badge"
+                data-testid="zoom-badge"
+                role="status"
+                aria-label={`Zoom ${formatZoomPct(viewport.zoom)}`}
+            >
+                {formatZoomPct(viewport.zoom)}
+            </div>
         </div>
     );
 }

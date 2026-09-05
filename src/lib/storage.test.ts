@@ -10,9 +10,11 @@ import {
     getViewport,
     isNameUniquePure,
     loadNodes,
+    loadProjects,
     saveNodes,
     saveProjects,
     setViewport,
+    updateNodeText,
     validateNodeTextPure,
     validateProjectNamePure,
 } from "./storage";
@@ -167,5 +169,17 @@ describe("viewport storage", () => {
     });
     it("refuses an unknown project on write", () => {
         expect(() => setViewport("missing", { x: 0, y: 0, zoom: 1 })).toThrow("Project not found.");
+    });
+    it("preserves updatedAt on viewport-only saves", () => {
+        saveProjects([project("p1", "P1")]);
+        saveNodes([node("root", "p1", null)]);
+        setViewport("p1", { x: 10, y: 20, zoom: 2 });
+        expect(loadProjects().find((p) => p.id === "p1")!.updatedAt).toBe(STAMP);
+    });
+    it("still bumps updatedAt on content edits", () => {
+        saveProjects([project("p1", "P1")]);
+        saveNodes([node("root", "p1", null)]);
+        updateNodeText("root", "Edited");
+        expect(loadProjects().find((p) => p.id === "p1")!.updatedAt).not.toBe(STAMP);
     });
 });

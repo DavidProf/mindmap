@@ -445,7 +445,9 @@ export function setViewport(projectId: string, viewport: Viewport): Viewport {
         y: viewport.y,
         zoom: clampZoom(viewport.zoom),
     };
-    projects[idx] = { ...projects[idx], viewport: clamped, updatedAt: bumpedIso(projects[idx].updatedAt) };
+    // Viewport-only saves must not bump updatedAt, or panning would
+    // reorder the home list. Content edits bump it elsewhere.
+    projects[idx] = { ...projects[idx], viewport: clamped };
     saveProjects(projects);
     return clamped;
 }
