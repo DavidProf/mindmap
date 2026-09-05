@@ -243,7 +243,7 @@ export function getNodeCountForProject(projectId: string): number {
     return loadNodes().filter((n) => n.projectId === projectId).length;
 }
 
-export const MAX_NODE_TEXT_LENGTH = 60;
+export const MAX_NODE_TEXT_LENGTH = 30;
 
 export function validateNodeTextPure(raw: string): string | null {
     const trimmed = raw.trim();

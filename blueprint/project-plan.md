@@ -29,7 +29,7 @@
 
 2. **Tree Editor Canvas — Auto-layout** — Every project starts with a single centered root node (named after project, editable). Strict parent→children tree (each node one parent, root has none). Custom auto-layout (SVG/Canvas, no React Flow) places children radially/hierarchically around parent predictably. Pannable (one-finger drag + mouse drag) + pinch/wheel zoom + "Re-center / Fit to view" button. Viewport persisted per project.
 
-3. **Node Add / Edit** — Circles, fixed uniform size, plain text only, enforced char limit (~40-60 chars, TODO: pick exact). Adaptive interaction: **Desktop:** multiple plus buttons around node appear on hover; **Mobile:** multiple plus buttons around node appear on tap (large hit targets ≥44px, spaced N/E/S/W or radially). Tapping any plus creates a child immediately placed by layout and focuses inline editor. All pluses do the same "Add child" action — redundant entry points for thumb reachability, not directional placement. Edit via double-tap / inline click *and* via context menu. Inline edit enforces limit (counter/truncate).
+3. **Node Add / Edit** — Circles, fixed uniform size, plain text only, enforced char limit (max 30 chars). Adaptive interaction: **Desktop:** multiple plus buttons around node appear on hover; **Mobile:** multiple plus buttons around node appear on tap (large hit targets ≥44px, spaced N/E/S/W or radially). Tapping any plus creates a child immediately placed by layout and focuses inline editor. All pluses do the same "Add child" action — redundant entry points for thumb reachability, not directional placement. Edit via double-tap / inline click *and* via context menu. Inline edit enforces limit (counter/truncate).
 
 4. **Context Menu + Delete** — Right-click (desktop) / long-press (mobile, ~500ms, not conflicting with drag) opens menu: Edit / Delete / Collapse-Expand (when applicable). Delete removes node + entire subtree after confirmation. No undo for MVP.
 
@@ -50,6 +50,9 @@
 - Dark mode, full a11y beyond basic keyboard/reachability, ads
 
 ### Post-MVP ideas (agreed to keep, not in MVP):
+- Node text limit 30 (tighten from shipped 60; existing over-limit nodes display as-is until edited)
+- Design polish pass (palette/typography tokens, collapse badge and empty-state feel)
+- IndexedDB storage (primary, with localStorage fallback for environments without it, notably mobile-framework WebViews)
 - Dense text node, image/video/rectangle nodes, link nodes
 - Graph cross-links
 - Undo/redo stack
@@ -61,24 +64,22 @@
 
 **Confirmed (local-only):**
 - `Project { id: string (uuid), name: string (unique case-insensitive), createdAt: ISO, updatedAt: ISO, rootNodeId: string, viewport: { x, y, zoom } }`
-- `Node { id: string, projectId: string, parentId: string | null (root = null), text: string (max ~50 chars), collapsed: boolean, createdAt, updatedAt }` — strict tree enforced; `parentId` single.
-- Persistence: `localStorage` or `IndexedDB` (TODO: pick; localStorage simpler for MVP, IndexedDB scales better). No backend. No auth. Single browser/device scope. Clear-storage loses data — acceptable for MVP with warning on delete.
+- `Node { id: string, projectId: string, parentId: string | null (root = null), text: string (max 30 chars), collapsed: boolean, createdAt, updatedAt }` — strict tree enforced; `parentId` single.
+- Persistence: `localStorage` for MVP (keys `mindmap:projects` + `mindmap:nodes`), migrating to `IndexedDB` with a `localStorage` fallback (see build plan). No backend. No auth. Single browser/device scope. Clear-storage loses data — acceptable for MVP with warning on delete.
 
-**Derived / UI:** layout positions computed, not stored; collapsed state and viewport *are* persisted (so reopen = where you left off).
+**Derived / UI:** layout positions computed, not stored; collapsed state and viewport *are* persisted (so reopen = where you left off). Sibling order is implicit creation order (layout preserves insertion order); no stored order field.
 
 **Business rules:**
-- Project name unique (trimmed, case-insensitive, non-empty, length limit e.g., 40 chars). Inline error: "A project with this name already exists."
+- Project name unique (trimmed, case-insensitive, non-empty, max 40 chars). Inline error: "A project with this name already exists."
 - Node text non-empty, trimmed, max length enforced; empty after edit = keep previous or delete? For MVP: revert to previous and show validation, not create empty node.
 - Delete node = delete subtree atomically; must confirm ("Delete this branch? This will remove X nodes.").
 - Collapse only available if node has children.
 
 **Edge cases:** duplicate name on rename, deleting root (disallowed — maybe prompt to delete project instead), adding child to collapsed parent (auto-expand), exporting empty/single-node map, storage quota exceeded, stale viewport after tree grows.
 
-**TODO:** Exact char limits (project name, node text), viewport persist format, whether to store node order among siblings.
-
 ## 5. Tech - What stack are we using?
 
-**Confirmed:** Vite + React 19 + TypeScript (already scaffolded). Planned **React Flow dropped** — use custom SVG (or Canvas) auto-layout instead. **Material UI (MUI)** retained for components/theme, tuned to minimal neutral palette (no gradients). No tests/CI yet (will add via `/tests` and `/ci` later).
+**Confirmed:** Vite + React 19 + TypeScript (already scaffolded). Planned **React Flow dropped** — custom SVG auto-layout instead. **Material UI (MUI)** retained for components/theme, tuned to minimal neutral palette (no gradients). Unit tests via Vitest plus Playwright Chromium smoke. No Verify/CI command yet (will add via `/ci` if wanted).
 
 **Layout:** Stateless tree layout function (e.g., radial or layered tidy-tree) that given nodes returns `x,y` per id. No D3 heavy dependency if avoidable; simple math + SVG lines for edges.
 
@@ -89,8 +90,6 @@
 **Constraints:** GitHub Pages static host, SPA routing needs `HashRouter` or `BrowserRouter` with `404.html` fallback and `base` in `vite.config.ts`. No env secrets.
 
 **Assumptions:** MUI + custom SVG keeps bundle small vs. React Flow. No backend means no API layer.
-
-**TODO:** Choose localStorage vs IndexedDB, zoom/pan impl, SVG vs Canvas for performance at ~50-100 nodes, exact PNG export library.
 
 ## 6. Monetize - How will this make money?
 
@@ -110,7 +109,7 @@
 
 **Accessibility MVP:** Basic keyboard: accessible labels, focus visible. Full screen-reader and full keyboard nav deferred post-MVP.
 
-**TODO:** Exact palette/typography tokens, collapse indicator design, empty-state illustration.
+**TODO:** Exact palette/typography tokens, collapse indicator design, empty-state illustration (see build-plan design polish pass).
 
 ## 8. Deployment - Where and how will this ship?
 
@@ -134,7 +133,7 @@
 
 **Assumptions:** Users accept tree-only for MVP; short text sufficient; MUI can be themed to Excalidraw-minimal without custom CSS burden; custom layout cheaper than React Flow.
 
-**Open TODOs:** Exact char limits, localStorage vs IndexedDB choice, PNG scope (whole tree vs viewport), node sibling order persistence, palette tokens, IndexedDB migration path to cloud later.
+**Open TODOs:** Palette tokens, IndexedDB migration path to cloud later.
 
 ## 11. Success Criteria
 

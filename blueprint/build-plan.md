@@ -12,9 +12,12 @@
 
 ## Post-MVP
 
-- [ ] 8. **Dense text & media nodes** — rectangle nodes for images/video/links and expanded text type (post-circle MVP)
-- [ ] 9. **Graph cross-links** — allow arbitrary links between nodes (breaks strict tree)
-- [ ] 10. **Undo/redo history** — in-memory stack for add/delete/edit/collapse (noted as deferred)
-- [ ] 11. **Home enhancements** — duplicate project, search/filter/sort, JSON import/export
-- [ ] 12. **Cloud sync & sharing** — auth + synced storage + shareable links (replaces local-only)
-- [ ] 13. **Presentation & a11y polish** — present mode, dark mode, keyboard nav, PDF/print, ads evaluation
+- [x] 8. **Node text limit 30** — tighten node text from 60 to 30 chars (validation, counter, tests; existing over-limit nodes display as-is until edited)
+- [ ] 9. **Design polish pass** — lock palette/typography tokens, refine collapse badge and empty-state feel, responsive check
+- [ ] 10. **IndexedDB storage** — migrate persistence to IndexedDB primary with localStorage fallback for environments without it (notably mobile-framework WebViews) plus unavailable warning
+- [ ] 11. **Dense text & media nodes** — rectangle nodes for images/video/links and expanded text type (post-circle MVP)
+- [ ] 12. **Graph cross-links** — allow arbitrary links between nodes (breaks strict tree)
+- [ ] 13. **Undo/redo history** — in-memory stack for add/delete/edit/collapse (noted as deferred)
+- [ ] 14. **Home enhancements** — duplicate project, search/filter/sort, JSON import/export
+- [ ] 15. **Cloud sync & sharing** — auth + synced storage + shareable links (replaces local-only)
+- [ ] 16. **Presentation & a11y polish** — present mode, dark mode, keyboard nav, PDF/print, ads evaluation

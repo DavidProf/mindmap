@@ -33,3 +33,44 @@ test("smoke: unknown project shows not-found with back link", async ({ page }) =
     await expect(page.getByRole("heading", { name: "Project not found" })).toBeVisible();
     await expect(page.getByText("Back to projects").first()).toBeVisible();
 });
+
+test("smoke: node editor caps text at 30 characters", async ({ page }) => {
+    const projectName = `Limit ${Date.now()}`;
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /new project|create your first project/i }).first().click();
+    await page.getByLabel("Project name").fill(projectName);
+    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByRole("button", { name: `Open project ${projectName}` }).click();
+    await expect(page).toHaveURL(/#\/project\/.+/);
+
+    await page.getByLabel(projectName, { exact: true }).click();
+    await page.getByRole("button", { name: `Add child to ${projectName}` }).first().click();
+    const editor = page.getByLabel("Edit node text");
+    await expect(editor).toBeVisible();
+    await editor.pressSequentially("x".repeat(35));
+    await expect(editor).toHaveValue("x".repeat(30));
+    await expect(page.getByText("30/30")).toBeVisible();
+    await editor.press("Escape");
+});
+
+test("smoke: over-limit stored node still renders until edited", async ({ page }) => {
+    await page.addInitScript(() => {
+        const now = new Date().toISOString();
+        window.localStorage.setItem(
+            "mindmap:projects",
+            JSON.stringify([
+                { id: "p1", name: "Grandfather", rootNodeId: "r1", createdAt: now, updatedAt: now, viewport: { x: 0, y: 0, zoom: 1 } },
+            ]),
+        );
+        window.localStorage.setItem(
+            "mindmap:nodes",
+            JSON.stringify([
+                { id: "r1", projectId: "p1", parentId: null, text: "x".repeat(40), side: null, collapsed: false, createdAt: now, updatedAt: now },
+            ]),
+        );
+    });
+    await page.goto("/#/project/p1");
+    await expect(page.getByTestId("tree-canvas")).toBeVisible();
+    await expect(page.locator('[data-node-id="r1"] .node-circle__text')).toHaveText("x".repeat(40));
+});

@@ -68,11 +68,11 @@ describe("validateNodeTextPure", () => {
     it("rejects blank text", () => {
         expect(validateNodeTextPure("  ")).toBe("Text is required.");
     });
-    it("rejects text over 60 characters", () => {
-        expect(validateNodeTextPure("x".repeat(61))).toBe("Text must be 60 characters or less.");
+    it("rejects text over 30 characters", () => {
+        expect(validateNodeTextPure("x".repeat(31))).toBe("Text must be 30 characters or less.");
     });
-    it("accepts 60 characters", () => {
-        expect(validateNodeTextPure("x".repeat(60))).toBeNull();
+    it("accepts 30 characters", () => {
+        expect(validateNodeTextPure("x".repeat(30))).toBeNull();
     });
 });
 
