@@ -199,8 +199,7 @@ checks do not make the Blueprint unusable.
 - Test watch: `npm run test:watch` (Vitest, reruns on change)
 - Browser tests: `npm run test:browser` (Playwright, Chromium smoke via `e2e/smoke.spec.ts`)
 
-No `Verify` command is configured yet. Run `/ci` or `$ci` to define one combined
-verification command and matching GitHub checks when you want automatic verification.
+- Verify: `npm run verify` (tests + typecheck + build)
 
 No browser test harness is configured yet. Run `/browser-tests` or
 `$browser-tests` to add one and document its command as `Browser tests`.

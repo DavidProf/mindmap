@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "verify": "npm test && npm run build"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
