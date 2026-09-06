@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import AppHeader from "../components/layout/AppHeader";
 import TreeCanvas from "../components/canvas/TreeCanvas";
+import ExportPreviewDialog from "../components/canvas/ExportPreviewDialog";
 import { loadProjects, loadNodes, addChildNode, updateNodeText, setNodeCollapsed, deleteNodeSubtree } from "../lib/storage";
 import { computeLayout } from "../lib/layout";
-import { exportMapAsPng } from "../lib/exportPng";
+import { exportMapAsPng, paddedExportBounds, renderMapToCanvas, resolveExportScale } from "../lib/exportPng";
 import type { Project } from "../types/project";
 import type { Node, NodeSide } from "../types/node";
 import "./EditorPage.css";
@@ -42,6 +43,10 @@ function EditorCanvas({ project }: { project: Project }) {
     const [recenterSignal, setRecenterSignal] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [exporting, setExporting] = useState(false);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [previewError, setPreviewError] = useState<string | null>(null);
+    const [downloadError, setDownloadError] = useState<string | null>(null);
 
     function refreshNodes() {
         setNodes(loadNodes().filter((n) => n.projectId === project.id));
@@ -118,12 +123,42 @@ function EditorCanvas({ project }: { project: Project }) {
     }
 
     const layout = computeLayout(nodes, project.rootNodeId);
+    const visibleNodes = nodes.filter((n) => layout.positions.has(n.id));
 
-    async function handleExport() {
+    function handleExport() {
+        setPreviewUrl(null);
+        setPreviewError(null);
+        setDownloadError(null);
+        try {
+            const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+            const scale = resolveExportScale(paddedExportBounds(layout.bounds), dpr);
+            const canvas = renderMapToCanvas({
+                nodes: visibleNodes,
+                positions: layout.positions,
+                edges: layout.edges,
+                bounds: layout.bounds,
+                scale,
+            });
+            setPreviewUrl(canvas.toDataURL("image/png"));
+        } catch (e) {
+            const message = e instanceof Error ? e.message : "Could not render preview.";
+            setPreviewError(message);
+            setError(message);
+        }
+        setPreviewOpen(true);
+    }
+
+    function handleClosePreview() {
+        if (exporting) return;
+        setPreviewOpen(false);
+        setPreviewUrl(null);
+    }
+
+    async function handleConfirmDownload() {
         if (exporting) return;
         setExporting(true);
+        setDownloadError(null);
         try {
-            const visibleNodes = nodes.filter((n) => layout.positions.has(n.id));
             await exportMapAsPng({
                 projectName: project.name,
                 nodes: visibleNodes,
@@ -132,8 +167,11 @@ function EditorCanvas({ project }: { project: Project }) {
                 bounds: layout.bounds,
             });
             setError(null);
+            setPreviewOpen(false);
         } catch (e) {
-            setError(e instanceof Error ? e.message : "Could not export PNG.");
+            const message = e instanceof Error ? e.message : "Could not export PNG.";
+            setDownloadError(message);
+            setError(message);
         } finally {
             setExporting(false);
         }
@@ -169,6 +207,15 @@ function EditorCanvas({ project }: { project: Project }) {
                     onUpdateText={handleUpdateText}
                     onToggleCollapsed={handleToggleCollapsed}
                     onDeleteSubtree={handleDeleteSubtree}
+                />
+                <ExportPreviewDialog
+                    open={previewOpen}
+                    downloading={exporting}
+                    previewUrl={previewUrl}
+                    previewError={previewError}
+                    downloadError={downloadError}
+                    onClose={handleClosePreview}
+                    onDownload={() => void handleConfirmDownload()}
                 />
             </main>
         </>

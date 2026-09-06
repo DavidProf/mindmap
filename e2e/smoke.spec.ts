@@ -137,3 +137,27 @@ test("polish: inline project rename blocks duplicate, commits valid name", async
     await page.getByLabel("Rename project").press("Enter");
     await expect(page.getByRole("button", { name: `Open project Gamma ${stamp}` })).toBeVisible();
 });
+
+test("export: preview opens, shows fitted image, and download closes it", async ({ page }) => {
+    const projectName = `Preview ${Date.now()}`;
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /new project|create your first project/i }).first().click();
+    await page.getByLabel("Project name").fill(projectName);
+    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByRole("button", { name: `Open project ${projectName}` }).click();
+    await expect(page).toHaveURL(/#\/project\/.+/);
+
+    await page.getByRole("button", { name: "Export PNG" }).click();
+    await expect(page.getByRole("heading", { name: "Export preview" })).toBeVisible();
+    const image = page.getByTestId("export-preview-image");
+    await expect(image).toBeVisible();
+    const src = await image.getAttribute("src");
+    expect(src?.startsWith("data:image/png")).toBe(true);
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download PNG" }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/-mindmap\.png$/);
+    await expect(page.getByRole("heading", { name: "Export preview" })).toHaveCount(0);
+});

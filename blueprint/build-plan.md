@@ -15,7 +15,7 @@
 - [x] 8. **Node text limit 30** — tighten node text from 60 to 30 chars (validation, counter, tests; existing over-limit nodes display as-is until edited)
 - [x] 9. **Design polish pass** — lock palette/typography tokens, refine collapse badge and empty-state feel, responsive check; interaction refinements: add badges smaller with larger offset from node and auto-hide on click-out/deselect, collapse badge click toggles expand/collapse, node rename commits on blur (click-out), project rename inline like node instead of dialog box
 - [x] 10. **Tree layout quality pass** — fix misleading placements: (a) root → A[right], B[right], D[right] + B → C[left] makes C read as root child; (b) root → A[right], B[right] + B → C[right] + A → D[bottom] makes D edge cross B edge / sit over C edge; improve subtree separation, edge routing, and parent-proximity so parentage stays readable
-- [ ] 11. **PNG export preview** — in-editor preview of whole-tree fitted PNG before download (confirm/download + cancel), light background as today
+- [x] 11. **PNG export preview** — in-editor preview of whole-tree fitted PNG before download (confirm/download + cancel), light background as today
 - [ ] 12. **IndexedDB storage** — migrate persistence to IndexedDB primary with localStorage fallback for environments without it (notably mobile-framework WebViews) plus unavailable warning
 - [ ] 13. **Dense text & media nodes** — rectangle nodes for images/video/links and expanded text type (post-circle MVP)
 - [ ] 14. **Graph cross-links** — allow arbitrary links between nodes (breaks strict tree)
