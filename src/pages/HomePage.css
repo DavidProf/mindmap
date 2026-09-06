@@ -70,21 +70,56 @@
     color: var(--muted);
 }
 
+.home-card__rename {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.home-card__rename-input {
+    width: 100%;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    background: var(--surface);
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    padding: 2px 6px;
+}
+
+.home-card__rename-input:focus {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 0;
+}
+
+.home-card__rename-meta {
+    font-size: 11px;
+    line-height: 1.2;
+    color: var(--muted);
+}
+
+.home-card__rename-meta--error {
+    color: var(--danger);
+}
+
 .home-empty {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 40px 24px;
+    padding: 48px 24px;
     text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
 .home-empty__icon {
-    width: 48px;
-    height: 48px;
+    width: 56px;
+    height: 56px;
     color: var(--faint);
 }
 

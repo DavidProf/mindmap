@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from "@mui/material";
-import { validateProjectNamePure } from "../../lib/storage";
+import { MAX_PROJECT_NAME_LENGTH, validateProjectNamePure } from "../../lib/storage";
 import type { Project } from "../../types/project";
 import { PILL_SX } from "../pillSx";
 
@@ -23,7 +23,7 @@ export default function CreateProjectDialog({ open, projects, onClose, onSubmit 
 
     const error = validateProjectNamePure(draft, projects);
     const showError = error !== null && draft.length > 0;
-    const helperText = showError ? error : `${draft.length}/40`;
+    const helperText = showError ? error : `${draft.length}/${MAX_PROJECT_NAME_LENGTH}`;
 
     function handleSubmit() {
         const trimmed = draft.trim();

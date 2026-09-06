@@ -54,6 +54,12 @@ export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, ed
     } = useViewport({ projectId, bounds, containerRef, onInteract: () => closeMenu() });
 
     function clearSelection() {
+        // Canvas mousedown is preventDefaulted for panning, so a pending
+        // editor never blurs on its own. Blur it so the onBlur commit path
+        // runs before the selection clears.
+        if (editingId !== null) {
+            (document.activeElement as HTMLElement | null)?.blur?.();
+        }
         setSelectedId(null);
     }
 
@@ -249,6 +255,7 @@ export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, ed
                             onCommitText={handleCommitText}
                             onCancelEdit={handleCancelEdit}
                             onContextMenu={handleNodeContextMenu}
+                            onToggleCollapsed={(id) => void onToggleCollapsed?.(id)}
                             collapsed={n.collapsed}
                             hiddenCount={n.collapsed ? (subtreeCounts.get(n.id) ?? 1) - 1 : 0}
                         />

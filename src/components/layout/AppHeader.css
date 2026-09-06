@@ -130,4 +130,13 @@
     .app-header__badge {
         display: none;
     }
+    .app-header__title {
+        max-width: 110px;
+    }
+    .app-header__actions {
+        gap: 8px;
+    }
+    .app-header__actions .MuiButton-root {
+        white-space: nowrap;
+    }
 }

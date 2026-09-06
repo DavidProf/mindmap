@@ -28,6 +28,7 @@ type NodeCircleProps = {
     onCommitText: (id: string, text: string) => void;
     onCancelEdit: (id: string) => void;
     onContextMenu: (id: string, x: number, y: number) => void;
+    onToggleCollapsed: (id: string) => void;
     collapsed: boolean;
     hiddenCount: number;
 };
@@ -47,6 +48,7 @@ export default function NodeCircle({
     onCommitText,
     onCancelEdit,
     onContextMenu,
+    onToggleCollapsed,
     collapsed,
     hiddenCount,
 }: NodeCircleProps) {
@@ -182,12 +184,24 @@ export default function NodeCircle({
                 )}
             </div>
             {collapsed && hiddenCount > 0 && (
-                <span
+                <button
+                    type="button"
                     className="node-badge"
-                    aria-label={`Collapsed, ${hiddenCount} hidden node${hiddenCount === 1 ? "" : "s"}`}
+                    aria-expanded="false"
+                    aria-label={`Expand, ${hiddenCount} hidden node${hiddenCount === 1 ? "" : "s"}`}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleCollapsed(id);
+                    }}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
                 >
                     +{hiddenCount}
-                </span>
+                </button>
             )}
             {PLUS_POSITIONS.map((pos) => (
                 <button

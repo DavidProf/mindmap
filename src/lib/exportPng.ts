@@ -1,14 +1,14 @@
 import { NODE_DIAMETER } from "./layout";
+import { TOKENS } from "../theme/tokens";
 import type { Node } from "../types/node";
 
 export const EXPORT_PADDING = 48;
-export const EXPORT_BACKGROUND = "#fbfaf7";
-export const EXPORT_EDGE_COLOR = "#94a3b8";
-export const EXPORT_NODE_FILL = "#ffffff";
-export const EXPORT_NODE_STROKE = "#334155";
-export const EXPORT_TEXT_COLOR = "#0f172a";
-export const EXPORT_FONT_FAMILY =
-    '"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+export const EXPORT_BACKGROUND = TOKENS.bg;
+export const EXPORT_EDGE_COLOR = TOKENS.line;
+export const EXPORT_NODE_FILL = TOKENS.nodeFill;
+export const EXPORT_NODE_STROKE = TOKENS.nodeStroke;
+export const EXPORT_TEXT_COLOR = TOKENS.text;
+export const EXPORT_FONT_FAMILY = TOKENS.fontSans;
 export const MAX_EXPORT_SIDE = 4096;
 
 export type ExportBounds = {

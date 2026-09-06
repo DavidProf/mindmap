@@ -12,6 +12,7 @@ const NODES_KEY = "mindmap:nodes";
 export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 3;
 export const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 };
+export const MAX_PROJECT_NAME_LENGTH = 40;
 
 let storageAvailable: boolean | null = null;
 let memoryProjects: Project[] | null = null;
@@ -161,7 +162,7 @@ export function validateProjectName(raw: string, excludeId?: string): string | n
 export function validateProjectNamePure(raw: string, projects: Project[], excludeId?: string): string | null {
     const trimmed = raw.trim();
     if (trimmed.length === 0) return "Name is required.";
-    if (trimmed.length > 40) return "Name must be 40 characters or less.";
+    if (trimmed.length > MAX_PROJECT_NAME_LENGTH) return `Name must be ${MAX_PROJECT_NAME_LENGTH} characters or less.`;
     if (!isNameUniquePure(trimmed, projects, excludeId)) return "A project with this name already exists.";
     return null;
 }

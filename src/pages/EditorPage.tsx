@@ -21,11 +21,11 @@ export default function EditorPage() {
                 <AppHeader variant="editor" projectName="Untitled project" />
                 <main className="editor-canvas editor-canvas--center">
                     <div className="editor-placeholder">
-                        <h2 style={{ fontSize: "16px", margin: 0 }}>Project not found</h2>
-                        <p style={{ color: "var(--muted)", fontSize: "13px", margin: "8px 0 0" }}>
+                        <h2>Project not found</h2>
+                        <p>
                             No project matches <code>{projectId ?? ""}</code>
                         </p>
-                        <Link to="/" style={{ fontSize: "13px", marginTop: "12px", display: "inline-block" }}>
+                        <Link to="/" className="editor-placeholder__link">
                             Back to projects
                         </Link>
                     </div>
@@ -109,10 +109,8 @@ function EditorCanvas({ project }: { project: Project }) {
                 <AppHeader variant="editor" projectName={project.name} />
                 <main className="editor-canvas editor-canvas--center">
                     <div className="editor-placeholder">
-                        <h2 style={{ fontSize: "16px", margin: 0 }}>Empty map</h2>
-                        <p style={{ color: "var(--muted)", fontSize: "13px", margin: "8px 0 0" }}>
-                            No nodes found for this project.
-                        </p>
+                        <h2>Empty map</h2>
+                        <p>No nodes found for this project.</p>
                     </div>
                 </main>
             </>

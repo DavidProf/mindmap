@@ -74,3 +74,66 @@ test("smoke: over-limit stored node still renders until edited", async ({ page }
     await expect(page.getByTestId("tree-canvas")).toBeVisible();
     await expect(page.locator('[data-node-id="r1"] .node-circle__text')).toHaveText("x".repeat(40));
 });
+
+test("polish: collapse badge click and keyboard toggle expand", async ({ page }) => {
+    const projectName = `Badge ${Date.now()}`;
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /new project|create your first project/i }).first().click();
+    await page.getByLabel("Project name").fill(projectName);
+    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByRole("button", { name: `Open project ${projectName}` }).click();
+    await expect(page).toHaveURL(/#\/project\/.+/);
+
+    const root = page.getByLabel(projectName, { exact: true });
+    await root.hover();
+    await page.getByRole("button", { name: `Add child to ${projectName}` }).first().click();
+    const editor = page.getByLabel("Edit node text");
+    await editor.fill("Badge kid");
+    await editor.press("Enter");
+    await expect(page.getByText("Badge kid")).toBeVisible();
+
+    await root.click({ button: "right" });
+    await page.getByRole("menuitem", { name: `Collapse "${projectName}"` }).click();
+    const badge = page.getByRole("button", { name: "Expand, 1 hidden node" });
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveAttribute("aria-expanded", "false");
+
+    await badge.click();
+    await expect(page.getByText("Badge kid")).toBeVisible();
+    await expect(page.getByRole("button", { name: /hidden node/ })).toHaveCount(0);
+
+    await root.click({ button: "right" });
+    await page.getByRole("menuitem", { name: `Collapse "${projectName}"` }).click();
+    const badgeAgain = page.getByRole("button", { name: "Expand, 1 hidden node" });
+    await badgeAgain.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Badge kid")).toBeVisible();
+});
+
+test("polish: inline project rename blocks duplicate, commits valid name", async ({ page }) => {
+    const stamp = Date.now();
+
+    await page.goto("/");
+    for (const n of [`Alpha ${stamp}`, `Beta ${stamp}`]) {
+        await page.getByRole("button", { name: /new project|create your first project/i }).first().click();
+        await page.getByLabel("Project name").fill(n);
+        await page.getByRole("button", { name: "Create project" }).click();
+        await expect(page.getByRole("button", { name: `Open project ${n}` })).toBeVisible();
+    }
+
+    await page.getByRole("button", { name: `Actions for Beta ${stamp}` }).click();
+    await page.getByRole("menuitem", { name: "Rename" }).click();
+    const input = page.getByLabel("Rename project");
+    await input.fill(`Alpha ${stamp}`);
+    await input.press("Enter");
+    await expect(page.getByText("A project with this name already exists.")).toBeVisible();
+    await expect(input).toBeVisible();
+    await input.press("Escape");
+
+    await page.getByRole("button", { name: `Actions for Beta ${stamp}` }).click();
+    await page.getByRole("menuitem", { name: "Rename" }).click();
+    await page.getByLabel("Rename project").fill(`Gamma ${stamp}`);
+    await page.getByLabel("Rename project").press("Enter");
+    await expect(page.getByRole("button", { name: `Open project Gamma ${stamp}` })).toBeVisible();
+});

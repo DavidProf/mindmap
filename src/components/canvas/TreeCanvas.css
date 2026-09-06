@@ -91,13 +91,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 16px;
+    height: 16px;
     background: var(--plus-bg);
-    border: 1.5px solid var(--plus-stroke);
+    border: 1px solid var(--faint);
     border-radius: var(--radius-full);
-    color: var(--plus-stroke);
-    font-size: 20px;
+    color: var(--muted);
+    font-size: 12px;
     line-height: 1;
     box-shadow: var(--shadow-sm);
 }
@@ -118,32 +118,31 @@
 }
 
 .node-wrap:hover .node-plus,
-.node-wrap:focus-within .node-plus,
-.node-wrap--selected .node-plus {
+.node-wrap:focus-within .node-plus {
     opacity: 1;
     pointer-events: auto;
 }
 
 .node-plus--north {
     left: 50%;
-    top: -9px;
+    top: -10px;
     transform: translate(-50%, -50%);
 }
 
 .node-plus--south {
     left: 50%;
-    bottom: -9px;
+    bottom: -10px;
     transform: translate(-50%, 50%);
 }
 
 .node-plus--west {
-    left: -9px;
+    left: -10px;
     top: 50%;
     transform: translate(-50%, -50%);
 }
 
 .node-plus--east {
-    right: -9px;
+    right: -10px;
     top: 50%;
     transform: translate(50%, -50%);
 }
@@ -170,9 +169,20 @@
     font-size: 11px;
     font-weight: 600;
     line-height: 1;
+    font-family: inherit;
     box-shadow: var(--shadow-sm);
     z-index: 2;
-    pointer-events: none;
+    cursor: pointer;
+}
+
+.node-badge:hover {
+    border-color: var(--plus-accent);
+    color: var(--plus-accent);
+}
+
+.node-badge:focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 1px;
 }
 
 .node-editor {

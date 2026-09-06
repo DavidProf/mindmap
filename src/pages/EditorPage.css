@@ -25,6 +25,23 @@
     text-align: center;
 }
 
+.editor-placeholder h2 {
+    font-size: 16px;
+    margin: 0;
+}
+
+.editor-placeholder p {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 8px 0 0;
+}
+
+.editor-placeholder__link {
+    font-size: 13px;
+    margin-top: 12px;
+    display: inline-block;
+}
+
 .editor-error {
     position: absolute;
     top: 12px;

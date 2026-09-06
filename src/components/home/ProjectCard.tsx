@@ -1,5 +1,6 @@
 import { IconButton } from "@mui/material";
 import type { Project } from "../../types/project";
+import ProjectRenameEditor from "./ProjectRenameEditor";
 
 function formatDate(iso: string): string {
     try {
@@ -15,13 +16,18 @@ function formatDate(iso: string): string {
 
 type Props = {
     project: Project;
+    projects: Project[];
     menuOpen: boolean;
+    renaming: boolean;
     onOpen: (id: string) => void;
     onMenu: (e: React.MouseEvent<HTMLElement>, project: Project) => void;
+    onRenameCommit: (id: string, name: string) => boolean;
+    onRenameCancel: () => void;
 };
 
-export default function ProjectCard({ project, menuOpen, onOpen, onMenu }: Props) {
+export default function ProjectCard({ project, projects, menuOpen, renaming, onOpen, onMenu, onRenameCommit, onRenameCancel }: Props) {
     function handleKeyDown(e: React.KeyboardEvent) {
+        if (renaming) return;
         if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             onOpen(project.id);
@@ -38,9 +44,18 @@ export default function ProjectCard({ project, menuOpen, onOpen, onMenu }: Props
             onKeyDown={handleKeyDown}
         >
             <div className="home-card__top">
-                <div className="home-card__name" title={project.name}>
-                    {project.name}
-                </div>
+                {renaming ? (
+                    <ProjectRenameEditor
+                        project={project}
+                        projects={projects}
+                        onCommit={(name) => onRenameCommit(project.id, name)}
+                        onCancel={onRenameCancel}
+                    />
+                ) : (
+                    <div className="home-card__name" title={project.name}>
+                        {project.name}
+                    </div>
+                )}
                 <IconButton
                     size="small"
                     aria-label={`Actions for ${project.name}`}

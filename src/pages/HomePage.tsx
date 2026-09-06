@@ -7,7 +7,6 @@ import CreateProjectDialog from "../components/home/CreateProjectDialog";
 import HomeEmptyState from "../components/home/HomeEmptyState";
 import ProjectGrid from "../components/home/ProjectGrid";
 import ProjectMenu from "../components/home/ProjectMenu";
-import RenameProjectDialog from "../components/home/RenameProjectDialog";
 import { PILL_SX } from "../components/pillSx";
 import {
     consumeCorruptionFlag,
@@ -30,7 +29,7 @@ export default function HomePage() {
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
     const [menuProject, setMenuProject] = useState<Project | null>(null);
     const [createOpen, setCreateOpen] = useState(false);
-    const [renameTarget, setRenameTarget] = useState<Project | null>(null);
+    const [renamingId, setRenamingId] = useState<string | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
     const [deleteNodeCount, setDeleteNodeCount] = useState(0);
     const [quotaError, setQuotaError] = useState<string | null>(null);
@@ -60,16 +59,16 @@ export default function HomePage() {
     }
 
     function openRename(p: Project) {
-        setRenameTarget(p);
+        setRenamingId(p.id);
     }
 
-    function handleRename(name: string): boolean {
-        if (!renameTarget) return false;
-        const err = validateProjectNamePure(name, projects, renameTarget.id);
+    function handleRenameCommit(id: string, name: string): boolean {
+        const err = validateProjectNamePure(name, projects, id);
         if (err) return false;
         try {
-            renameProject(renameTarget.id, name);
+            renameProject(id, name);
             setProjects(getProjectsSortedByUpdatedAt());
+            setRenamingId(null);
             return true;
         } catch (e) {
             if (e instanceof Error) setQuotaError(e.message);
@@ -146,8 +145,11 @@ export default function HomePage() {
                     <ProjectGrid
                         projects={projects}
                         openMenuId={menuAnchor ? (menuProject?.id ?? null) : null}
+                        renamingId={renamingId}
                         onOpen={navigateToProject}
                         onMenu={openMenu}
+                        onRenameCommit={handleRenameCommit}
+                        onRenameCancel={() => setRenamingId(null)}
                     />
                 )}
 
@@ -165,15 +167,6 @@ export default function HomePage() {
                     projects={projects}
                     onClose={() => setCreateOpen(false)}
                     onSubmit={handleCreate}
-                />
-
-                <RenameProjectDialog
-                    open={Boolean(renameTarget)}
-                    projects={projects}
-                    initialName={renameTarget?.name ?? ""}
-                    excludeId={renameTarget?.id ?? null}
-                    onClose={() => setRenameTarget(null)}
-                    onSubmit={handleRename}
                 />
 
                 <ConfirmDeleteDialog

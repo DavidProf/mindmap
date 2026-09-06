@@ -1,28 +1,28 @@
 import { createTheme } from "@mui/material/styles";
+import { TOKENS } from "./tokens";
 
 const muiTheme = createTheme({
     palette: {
         primary: {
-            main: "#3b82f6",
-            light: "#93c5fd",
-            dark: "#2563eb",
-            contrastText: "#ffffff",
+            main: TOKENS.accent,
+            light: TOKENS.accentRing,
+            dark: TOKENS.accentHover,
+            contrastText: TOKENS.accentInk,
         },
         background: {
-            default: "#fbfaf7",
-            paper: "#ffffff",
+            default: TOKENS.bg,
+            paper: TOKENS.surface,
         },
         text: {
-            primary: "#0f172a",
-            secondary: "#64748b",
+            primary: TOKENS.text,
+            secondary: TOKENS.muted,
         },
         error: {
-            main: "#ef4444",
+            main: TOKENS.danger,
         },
     },
     typography: {
-        fontFamily:
-            '"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+        fontFamily: TOKENS.fontSans,
     },
     shape: {
         borderRadius: 12,
