@@ -1,6 +1,6 @@
 # Mindmap - Project Overview
 
-<!-- blueprint:source-hash 341b2a48a5de57f0ee5d2ffb8f727b52f64b6d8632151ca71fdb5868710a5dc1 -->
+<!-- blueprint:source-hash e8358c0f588aae68929d4bfb2e4aba93e6ea7f44c41b8318a9a81ce2589767a2 -->
 
 > Calm, mobile-first mind-map app where a centered root grows into a strict auto-laid-out tree that can be collapsed and exported as PNG - local-only, no login, Excalidraw-minimal on GitHub Pages.
 
@@ -41,9 +41,12 @@ In `build-plan.md` order (MVP 1-7 plus item 8 shipped):
 14. **Graph cross-links** - arbitrary links between nodes (breaks strict tree).
 15. **Undo and redo** - in-memory stack for add/delete/edit/collapse.
 16. **Home enhancements** - duplicate project, search/filter/sort, JSON import/export.
-17. **Cloud sync and sharing** - auth plus synced storage plus shareable links.
-18. **Presentation and a11y polish** - present mode, dark mode, keyboard nav (incl. Select + Del to delete selected node), PDF/print, ads evaluation.
-19. **Multi-select nodes** - multi-select with bulk actions; sequenced after item 12.
+17. **Presentation and a11y polish** - present mode, dark mode, keyboard nav (incl. Select + Del to delete selected node), PDF/print, ads evaluation.
+18. **Multi-select nodes** - multi-select with bulk actions; sequenced after item 12.
+19. **Grid-like layout** - alternative placement model toward stable, direction-faithful positioning.
+20. **PNG preview fit-to-view** - scale whole-tree preview to fit the dialog without scrolling.
+21. **Share via URL** - encode a project into a shareable URL (query/hash) that opens or imports a copy, with length-limit and malformed-link handling.
+22. **Team sharing via short link** - cloud-backed short link for teammates to open and edit the same project; local-only remains the default.
 
 ## Data model
 
@@ -114,11 +117,11 @@ Responsive and touch: hover logic disabled on touch, long-press tuned not to con
 - **Preview:** `npm run preview`
 - **Lint:** `npm run lint`
 - **SPA routing:** locked: `base "/mindmap/"` in production plus `HashRouter`, so no `404.html` fallback is needed.
-- **Storage:** browser `localStorage` only for now (IndexedDB migration is build-plan item 10); no DB, no env vars, no workers or cron, no health check
-- **Verify and CI:** no combined Verify command yet; planned via `/ci` if wanted.
+- **Storage:** browser `localStorage` only for now (IndexedDB migration is build-plan item 12); no DB, no env vars, no workers or cron, no health check
+- **Verify and CI:** `npm run verify` (tests plus typecheck plus build), run locally and on GitHub via `.github/workflows/verify.yml` for pull requests and pushes to `main`.
 
 ## Open questions
 
 - **Zoom % indicator (resolved by shipping):** build-plan item 7 added it though `project-plan.md` never mentions it. It shipped as a tiny read-only badge; no plan edit needed unless the direction changes.
 - **Stale plan text:** `project-plan.md` still describes the 30-char limit as a post-MVP idea and says "no browser tests harness yet," but item 8 is now done and `npm run test:browser` exists. Plans remain the source of truth; consider a small plan touch-up on the next plan edit, then re-run `/overview`.
-- **TODOs still in plans:** palette/typography tokens, collapse-indicator design, empty-state illustration (all feed build-plan item 9); cloud-migration path (feeds item 10).
+- **TODOs still in plans:** palette/typography tokens, collapse-indicator design, empty-state illustration (all feed build-plan item 9); cloud-migration path (feeds item 12).

@@ -21,7 +21,9 @@
 - [ ] 14. **Graph cross-links** — allow arbitrary links between nodes (breaks strict tree)
 - [ ] 15. **Undo/redo history** — in-memory stack for add/delete/edit/collapse (noted as deferred)
 - [ ] 16. **Home enhancements** — duplicate project, search/filter/sort, JSON import/export
-- [ ] 17. **Cloud sync & sharing** — auth + synced storage + shareable links (replaces local-only)
-- [ ] 18. **Presentation & a11y polish** — present mode, dark mode, keyboard nav (incl. Select + Del to delete selected node), PDF/print, ads evaluation
-- [ ] 19. **Multi-select nodes** — multi-select nodes with bulk actions (delete/collapse/move TBD)
-- [ ] 20. **Grid-like layout** — alternative placement model toward stable, direction-faithful positioning (idea captured from layout quality work; pending discussion before speccing)
+- [ ] 17. **Presentation & a11y polish** — present mode, dark mode, keyboard nav (incl. Select + Del to delete selected node), PDF/print, ads evaluation
+- [ ] 18. **Multi-select nodes** — multi-select nodes with bulk actions (delete/collapse/move TBD)
+- [ ] 19. **Grid-like layout** — alternative placement model toward stable, direction-faithful positioning (idea captured from layout quality work; pending discussion before speccing)
+- [ ] 20. **PNG preview fit-to-view** — scale whole-tree preview to fit the dialog without scrolling (fit-to-dialog; zoom to actual size where feasible)
+- [ ] 21. **Share via URL** — encode a project into a shareable URL (query/hash) that opens or imports a copy, with length-limit + malformed-link handling
+- [ ] 22. **Team sharing via short link** — cloud-backed short link that lets teammates open and edit the same project (auth + synced storage); local-only remains the default
