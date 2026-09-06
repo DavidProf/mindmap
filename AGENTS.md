@@ -7,7 +7,7 @@ this file, so there is a single source of truth.
 
 ## What this is
 
-A description of your project and the problem it solves.
+A mind map application, focused on simplicity to enable those who want to build a graphical map of related points in a subject.
 
 This project is built with the **AI Blueprint**, a workflow layer, not an
 app skeleton. To start a new project, scaffold the app first in an empty folder
