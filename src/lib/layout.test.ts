@@ -248,7 +248,7 @@ describe("computeLayout", () => {
         const plain = node("plain", "root", "west");
         const withMedia: Node = {
             ...node("framed", "root", "east"),
-            media: { kind: "image", src: "https://example.com/a.png" },
+            media: { kind: "image", src: "https://example.com/a.png", uploadId: null },
         };
         const { positions, bounds } = computeLayout([node("root", null), plain, withMedia], "root");
         const framed = positions.get("framed")!;

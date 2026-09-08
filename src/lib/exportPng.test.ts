@@ -150,6 +150,12 @@ describe("link export indicator (13b)", () => {
         expect(note.x).toBeGreaterThan(rect.x);
         expect(note.y).toBeGreaterThan(rect.y);
         expect(note.y).toBeLessThan(rect.y + rect.height);
+        expect(note.y - note.radius).toBeLessThan(rect.y);
+    });
+    it("centers the circle badge on the rim", () => {
+        const badge = linkBadgeCenterPure(100, 100, 2, "circle");
+        const dist = Math.hypot(badge.x - 100, badge.y - 100);
+        expect(dist).toBeCloseTo((NODE_DIAMETER / 2) * 2, 6);
     });
     it("scales the badge with the export scale", () => {
         const small = linkBadgeCenterPure(0, 0, 1, "circle");
@@ -175,6 +181,7 @@ describe("media export indicator (13c)", () => {
         expect(badge.x).toBeLessThan(rect.x + rect.width);
         expect(badge.y).toBeGreaterThan(rect.y);
         expect(badge.y).toBeLessThan(rect.y + rect.height);
+        expect(badge.y - badge.radius).toBeLessThan(rect.y);
     });
     it("scales the badge with the export scale", () => {
         const small = mediaBadgeCenterPure(0, 0, 1);

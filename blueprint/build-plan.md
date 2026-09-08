@@ -21,7 +21,7 @@
   - [x] 13a. **Expanded-text rectangle nodes** — note kind with longer text, rect rendering, size-aware layout + PNG export
   - [x] 13b. **Link nodes** — URL attach/open on nodes (validation, affordance, export handling)
   - [x] 13c. **Image/video rectangle nodes** — media attach/render with persistence and export handling
-  - [ ] 13d. **Local image upload** — attach image files from the device, stored locally in-browser via IndexedDB (no backend), with size guard, thumbnail rendering, and PNG export
+  - [x] 13d. **Local image upload** — attach image files from the device, stored locally in-browser via IndexedDB (no backend), with size guard, thumbnail rendering, and PNG export
   - [ ] 13e. **Full-bleed media nodes** — per-node "Fill node with media" option, on by default (text becomes tooltip/alias; off keeps text + thumbnail); video plays inline via click-to-play
   - [ ] 13f. **Node resize** — per-node small (default) / medium / large size for note and media nodes via context menu; adding media auto-sets medium; layout and export honor the footprint
 - [ ] 14. **Graph cross-links** — allow arbitrary links between nodes (breaks strict tree)

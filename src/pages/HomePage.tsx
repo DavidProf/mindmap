@@ -19,6 +19,7 @@ import {
     renameProjectAsync,
 } from "../storage/operations";
 import type { StorageBackend } from "../storage/backend";
+import { createIdbMediaBlobStore } from "../storage/mediaBlobs";
 import type { Project } from "../types/project";
 import "./HomePage.css";
 
@@ -36,6 +37,7 @@ export default function HomePage() {
     const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
     const [deleteNodeCount, setDeleteNodeCount] = useState(0);
     const [quotaError, setQuotaError] = useState<string | null>(null);
+    const [blobStore] = useState(() => createIdbMediaBlobStore());
 
     useEffect(() => {
         let cancelled = false;
@@ -109,7 +111,7 @@ export default function HomePage() {
     async function handleDelete() {
         if (!deleteTarget || !backend) return;
         try {
-            await deleteProjectAsync(backend, deleteTarget.id);
+            await deleteProjectAsync(backend, deleteTarget.id, blobStore);
             await refresh(backend);
             setDeleteTarget(null);
         } catch (e) {

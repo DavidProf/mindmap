@@ -50,18 +50,27 @@ export function isNodeMediaKind(value: unknown): value is NodeMediaKind {
     return typeof value === "string" && (NODE_MEDIA_KINDS as readonly string[]).includes(value);
 }
 
-export type NodeMedia = { kind: NodeMediaKind; src: string };
+export type NodeMedia = { kind: NodeMediaKind; src: string; uploadId: string | null };
 
 export const MAX_MEDIA_URL_LENGTH = MAX_URL_LENGTH;
+
+function normalizeUploadId(value: unknown): string | null {
+    return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
 
 export function normalizeNodeMediaValue(value: unknown): NodeMedia | null {
     if (value === null || value === undefined) return null;
     if (typeof value !== "object") return null;
     const record = value as Record<string, unknown>;
     if (!isNodeMediaKind(record.kind)) return null;
+    // Uploads carry pixels from the blob store; src is ignored.
+    if (record.kind === "image") {
+        const uploadId = normalizeUploadId(record.uploadId);
+        if (uploadId !== null) return { kind: record.kind, src: "", uploadId };
+    }
     const src = normalizeNodeUrlValue(record.src);
     if (src === null) return null;
-    return { kind: record.kind, src };
+    return { kind: record.kind, src, uploadId: null };
 }
 
 export type Node = {
@@ -89,13 +98,16 @@ export function normalizeNodes(nodes: Node[]): Node[] {
         const wantMedia = normalizeNodeMediaValue(rawMedia);
         const hasMediaField = Object.prototype.hasOwnProperty.call(n, "media");
         const prevMedia = (n as Node).media;
+        const prevUploadId = prevMedia?.uploadId ?? null;
+        const wantUploadId = wantMedia?.uploadId ?? null;
         const mediaSame =
             wantMedia === null
                 ? prevMedia === null
                 : prevMedia !== null &&
                   prevMedia !== undefined &&
                   prevMedia.kind === wantMedia.kind &&
-                  prevMedia.src === wantMedia.src;
+                  prevMedia.src === wantMedia.src &&
+                  prevUploadId === wantUploadId;
         if (wantKind === n.kind && hasUrlField && (n as Node).url === wantUrl && hasMediaField && mediaSame)
             return n;
         changed = true;

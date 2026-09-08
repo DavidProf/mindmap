@@ -22,6 +22,8 @@ type NodeContextMenuProps = {
     onEditMedia: () => void;
     onOpenMedia: () => void;
     onRemoveMedia: () => void;
+    onUploadImage: () => void;
+    canUpload: boolean;
     onToggleCollapse: () => void;
     onDelete: () => void;
 };
@@ -44,6 +46,8 @@ export default function NodeContextMenu({
     onEditMedia,
     onOpenMedia,
     onRemoveMedia,
+    onUploadImage,
+    canUpload,
     onToggleCollapse,
     onDelete,
 }: NodeContextMenuProps) {
@@ -79,6 +83,14 @@ export default function NodeContextMenu({
                     Remove media
                 </MenuItem>
             )}
+            <MenuItem
+                onClick={onUploadImage}
+                disabled={!canUpload}
+                title={canUpload ? undefined : "Uploads need IndexedDB storage"}
+                aria-label={`Upload image for "${text}"`}
+            >
+                Upload image
+            </MenuItem>
             {kind === "note" ? (
                 <MenuItem onClick={() => onConvert("circle")} aria-label={`Convert "${text}" to circle`}>
                     Convert to circle

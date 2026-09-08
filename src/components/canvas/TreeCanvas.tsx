@@ -17,7 +17,7 @@ import NodeDeleteDialog from "./NodeDeleteDialog";
 import type { NodeDeleteTarget } from "./NodeDeleteDialog";
 import NodeLinkDialog from "./NodeLinkDialog";
 import type { NodeLinkTarget } from "./NodeLinkDialog";
-import NodeMediaDialog from "./NodeMediaDialog";
+import NodeMediaDialog, { UPLOAD_ACCEPT } from "./NodeMediaDialog";
 import type { NodeMediaTarget } from "./NodeMediaDialog";
 import { openNodeUrl } from "../../lib/link";
 import "./TreeCanvas.css";
@@ -37,12 +37,17 @@ type TreeCanvasProps = {
     onSetKind?: (nodeId: string, kind: NodeKind, opts?: { allowTruncate?: boolean }) => Promise<Node | null>;
     onSetUrl?: (nodeId: string, url: string | null) => Promise<Node | null>;
     onSetMedia?: (nodeId: string, media: NodeMedia | null) => Promise<Node | null>;
+    onUploadMedia?: (nodeId: string, file: File) => Promise<string | null>;
+    loadBlob?: (uploadId: string) => Promise<Blob | null>;
+    canUpload?: boolean;
     onToggleCollapsed?: (nodeId: string) => Promise<Node | null>;
     onDeleteSubtree?: (nodeId: string) => Promise<{ deletedIds: string[] } | null>;
 };
 
-export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onSetUrl, onSetMedia, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
+export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onSetUrl, onSetMedia, onUploadMedia, loadBlob, canUpload, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const uploadInputRef = useRef<HTMLInputElement | null>(null);
+    const [uploadNodeId, setUploadNodeId] = useState<string | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [menu, setMenu] = useState<NodeMenuState | null>(null);
@@ -228,7 +233,31 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
         const media = target?.media ?? null;
         closeMenu(target?.id);
-        if (media) openNodeUrl(media.src);
+        if (media && media.src.trim().length > 0) openNodeUrl(media.src);
+    }
+
+    function handleMenuUploadImage() {
+        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
+        closeMenu(target?.id);
+        if (!target || !canUpload) return;
+        setUploadNodeId(target.id);
+        uploadInputRef.current?.click();
+    }
+
+    async function handlePickedUpload(nodeId: string, file: File | null): Promise<string | null> {
+        if (!file) return null;
+        const message = (await onUploadMedia?.(nodeId, file)) ?? null;
+        if (message === null) focusCircle(nodeId);
+        return message;
+    }
+
+    async function handleDialogUploadFile(file: File): Promise<string | null> {
+        const target = mediaTarget;
+        if (!target) return "Nothing to attach to.";
+        const message = await handlePickedUpload(target.nodeId, file);
+        // On success the dialog closes like a save; on error it stays open.
+        if (message === null) setMediaTarget(null);
+        return message;
     }
 
     async function handleRemoveMedia() {
@@ -307,10 +336,16 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         if (url) openNodeUrl(url);
     }
 
-    function handleOpenMediaBadge(nodeId: string) {
+    async function handleOpenMediaBadge(nodeId: string) {
         const node = nodes.find((n) => n.id === nodeId) ?? null;
         const media = node?.media ?? null;
-        if (media) openNodeUrl(media.src);
+        if (!media) return;
+        if (media.uploadId && loadBlob) {
+            const blob = await loadBlob(media.uploadId).catch(() => null);
+            if (blob) window.open(URL.createObjectURL(blob), "_blank", "noopener,noreferrer");
+            return;
+        }
+        if (media.src.trim().length > 0) openNodeUrl(media.src);
     }
 
     function focusCircle(nodeId: string) {
@@ -399,12 +434,27 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                                 {...nodeProps}
                                 media={n.media ?? null}
                                 onOpenMedia={handleOpenMediaBadge}
+                                loadBlob={loadBlob}
                             />
                         );
                     }
                     return <NodeCircle key={n.id} {...nodeProps} />;
                 })}
             </div>
+            <input
+                ref={uploadInputRef}
+                type="file"
+                hidden
+                accept={UPLOAD_ACCEPT}
+                aria-label="Upload image file"
+                onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    e.target.value = "";
+                    const nodeId = uploadNodeId;
+                    setUploadNodeId(null);
+                    if (file && nodeId) void handlePickedUpload(nodeId, file);
+                }}
+            />
             {menuTarget && (
                 <NodeContextMenu
                     menu={menu}
@@ -424,6 +474,8 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                     onEditMedia={handleMenuMedia}
                     onOpenMedia={handleOpenMedia}
                     onRemoveMedia={() => void handleRemoveMedia()}
+                    onUploadImage={handleMenuUploadImage}
+                    canUpload={canUpload ?? false}
                     onToggleCollapse={handleMenuToggleCollapse}
                     onDelete={handleMenuDelete}
                 />
@@ -431,16 +483,18 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
             <NodeConvertDialog target={convertTarget} onCancel={handleCancelConvert} onConfirm={() => void handleConfirmConvert()} />
             <NodeDeleteDialog target={deleteTarget} onCancel={handleCancelDelete} onConfirm={handleConfirmDelete} />
             <NodeLinkDialog
-                key={linkTarget ? `${linkTarget.nodeId}:${linkTarget.url ?? ""}` : "closed"}
+                key={linkTarget ? `${linkTarget.nodeId}:${linkTarget.url ?? ""}` : "link-closed"}
                 target={linkTarget}
                 onCancel={handleCancelLink}
                 onSave={(url) => void handleSaveLink(url)}
             />
             <NodeMediaDialog
-                key={mediaTarget ? `${mediaTarget.nodeId}:${mediaTarget.media?.kind ?? ""}:${mediaTarget.media?.src ?? ""}` : "closed"}
+                key={mediaTarget ? `${mediaTarget.nodeId}:${mediaTarget.media?.kind ?? ""}:${mediaTarget.media?.src ?? ""}` : "media-closed"}
                 target={mediaTarget}
+                canUpload={canUpload ?? false}
                 onCancel={handleCancelMedia}
                 onSave={(media) => void handleSaveMedia(media)}
+                onUploadFile={(file) => handleDialogUploadFile(file)}
             />
             <div
                 className="tree-zoom-badge"

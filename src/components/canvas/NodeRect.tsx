@@ -4,6 +4,7 @@ import type { NodeMedia, NodeSide } from "../../types/node";
 import NodeEditor from "./NodeEditor";
 import NodeLinkBadge from "./NodeLinkBadge";
 import NodeMediaGlyph from "./NodeMediaGlyph";
+import NodeUploadedImage from "./NodeUploadedImage";
 import { PLUS_POSITIONS, useNodeGestures } from "./useNodeGestures";
 import { MAX_NOTE_TEXT_LENGTH } from "../../storage/localStore";
 import "./TreeCanvas.css";
@@ -26,6 +27,7 @@ type NodeRectProps = {
     onToggleCollapsed: (id: string) => void;
     onOpenLink: (id: string) => void;
     onOpenMedia: (id: string) => void;
+    loadBlob?: (uploadId: string) => Promise<Blob | null>;
     collapsed: boolean;
     hiddenCount: number;
 };
@@ -48,13 +50,15 @@ export default function NodeRect({
     onToggleCollapsed,
     onOpenLink,
     onOpenMedia,
+    loadBlob,
     collapsed,
     hiddenCount,
 }: NodeRectProps) {
     const needsTooltip = text.length > 60;
     const g = useNodeGestures({ id, selected, onSelect, onEditStart, onContextMenu });
     const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
-    const showImage = media?.kind === "image" && media.src !== brokenSrc;
+    const uploadId = media?.uploadId ?? null;
+    const showImage = media?.kind === "image" && media.src.trim().length > 0 && media.src !== brokenSrc;
 
     return (
         <div
@@ -94,9 +98,12 @@ export default function NodeRect({
                 ) : (
                     <>
                         <span className={`node-rect__text${media ? " node-rect__text--media" : ""}`}>{text}</span>
-                        {media && (
-                            <span className="node-rect__media" aria-hidden="true">
-                                {showImage ? (
+                        {media &&
+                            (uploadId && loadBlob ? (
+                                <NodeUploadedImage uploadId={uploadId} loadBlob={loadBlob} />
+                            ) : (
+                                <span className="node-rect__media" aria-hidden="true">
+                                    {showImage ? (
                                     <img
                                         className="node-rect__img"
                                         src={media.src}
@@ -118,6 +125,7 @@ export default function NodeRect({
                                     </span>
                                 )}
                             </span>
+                            )
                         )}
                     </>
                 )}
@@ -127,7 +135,7 @@ export default function NodeRect({
                 <button
                     type="button"
                     className="node-media"
-                    title={`${media.kind}: ${media.src}`}
+                    title={uploadId ? "Uploaded image" : `${media.kind}: ${media.src}`}
                     aria-label={`Open ${media.kind} for "${text}"`}
                     onMouseDown={(e) => e.stopPropagation()}
                     onTouchStart={(e) => e.stopPropagation()}

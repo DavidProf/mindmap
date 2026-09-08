@@ -9,19 +9,26 @@ import TextField from "@mui/material/TextField";
 import type { NodeMedia, NodeMediaKind } from "../../types/node";
 import { isNodeMediaKind } from "../../types/node";
 import { validateNodeMediaPure } from "../../storage/localStore";
+import { TOKENS } from "../../theme/tokens";
 import { PILL_SX } from "../pillSx";
 
 export type NodeMediaTarget = { nodeId: string; text: string; media: NodeMedia | null };
 
+export const UPLOAD_ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
+
 type NodeMediaDialogProps = {
     target: NodeMediaTarget | null;
+    canUpload: boolean;
     onCancel: () => void;
     onSave: (media: NodeMedia | null) => void;
+    onUploadFile: (file: File) => Promise<string | null>;
 };
 
-export default function NodeMediaDialog({ target, onCancel, onSave }: NodeMediaDialogProps) {
+export default function NodeMediaDialog({ target, canUpload, onCancel, onSave, onUploadFile }: NodeMediaDialogProps) {
     const [mediaKind, setMediaKind] = useState<NodeMediaKind>(target?.media?.kind ?? "image");
     const [draft, setDraft] = useState(target?.media?.src ?? "");
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     const trimmed = draft.trim();
     const error = trimmed.length === 0 ? null : validateNodeMediaPure(mediaKind, draft);
@@ -33,7 +40,19 @@ export default function NodeMediaDialog({ target, onCancel, onSave }: NodeMediaD
             onSave(null);
             return;
         }
-        onSave({ kind: mediaKind, src: draft });
+        onSave({ kind: mediaKind, src: draft, uploadId: null });
+    }
+
+    async function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0] ?? null;
+        e.target.value = "";
+        if (!file) return;
+        setUploading(true);
+        setUploadError(null);
+        const message = await onUploadFile(file);
+        // On success the parent closes the dialog; on error it stays open.
+        setUploading(false);
+        if (message !== null) setUploadError(message);
     }
 
     return (
@@ -74,6 +93,23 @@ export default function NodeMediaDialog({ target, onCancel, onSave }: NodeMediaD
                     helperText={error ?? (hasMedia ? "Save empty to remove the media." : "Media opens in a new tab.")}
                     slotProps={{ htmlInput: { "aria-label": "Media URL", inputMode: "url", autoComplete: "url" } }}
                 />
+                {canUpload ? (
+                    <div style={{ marginTop: 8 }}>
+                        <Button component="label" disabled={uploading} aria-label="Upload image file" sx={PILL_SX}>
+                            {uploading ? "Uploading..." : "Upload image"}
+                            <input type="file" hidden accept={UPLOAD_ACCEPT} onChange={(e) => void handlePick(e)} />
+                        </Button>
+                        {uploadError && (
+                            <div role="alert" style={{ color: TOKENS.danger, fontSize: 12, marginTop: 4 }}>
+                                {uploadError}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div style={{ color: TOKENS.muted, fontSize: 12, marginTop: 8 }}>
+                        File uploads need IndexedDB storage, which is unavailable here. URL media still works.
+                    </div>
+                )}
             </DialogContent>
             <DialogActions>
                 {hasMedia && (

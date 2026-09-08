@@ -134,9 +134,11 @@ export function mediaBadgeCenterPure(
     cy: number,
     scale: number,
 ): { x: number; y: number; radius: number } {
+    // Straddles the top-left corner like the canvas badge: flush side,
+    // half a radius below the top edge.
     const radius = MEDIA_BADGE_RADIUS * scale;
     const rect = noteRectForExport(cx, cy, scale);
-    return { x: rect.x + radius + 2 * scale, y: rect.y + radius + 2 * scale, radius };
+    return { x: rect.x + radius, y: rect.y + radius / 2, radius };
 }
 
 export function shouldDrawLinkBadge(url: unknown): boolean {
@@ -152,10 +154,16 @@ export function linkBadgeCenterPure(
     const radius = LINK_BADGE_RADIUS * scale;
     if (kind === "note") {
         const rect = noteRectForExport(cx, cy, scale);
-        return { x: rect.x + rect.width - radius - 2 * scale, y: rect.y + radius + 2 * scale, radius };
+        return { x: rect.x + rect.width - radius, y: rect.y + radius / 2, radius };
     }
+    // Badge center on the rim at 45 degrees, straddling the circle edge
+    // the way the canvas badge overlaps the node border.
     const nodeRadius = (NODE_DIAMETER / 2) * scale;
-    return { x: cx + nodeRadius * 0.65, y: cy - nodeRadius * 0.65, radius };
+    return {
+        x: cx + nodeRadius * Math.SQRT1_2,
+        y: cy - nodeRadius * Math.SQRT1_2,
+        radius,
+    };
 }
 
 export function noteRectForExport(

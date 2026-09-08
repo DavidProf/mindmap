@@ -6,6 +6,7 @@ const MAX_WARNING_NAMES = 3;
 export type ExportMediaLoad = {
     images: Map<string, HTMLImageElement>;
     failedIds: string[];
+    objectUrls: string[];
 };
 
 type MediaNode = { id: string; media: NodeMedia | null };
@@ -32,25 +33,48 @@ function withTimeout<T>(work: Promise<T>, timeoutMs: number, src: string): Promi
 
 export async function loadExportMediaImages(
     nodes: MediaNode[],
-    opts?: { timeoutMs?: number; loadOne?: (src: string) => Promise<HTMLImageElement> },
+    opts?: {
+        timeoutMs?: number;
+        loadOne?: (src: string) => Promise<HTMLImageElement>;
+        resolveUpload?: (uploadId: string) => Promise<string>;
+    },
 ): Promise<ExportMediaLoad> {
     const timeoutMs = opts?.timeoutMs ?? EXPORT_IMAGE_TIMEOUT_MS;
     const loadOne = opts?.loadOne ?? loadImageElement;
+    const resolveUpload = opts?.resolveUpload;
     const images = new Map<string, HTMLImageElement>();
     const failedIds: string[] = [];
+    const objectUrls: string[] = [];
     await Promise.all(
         nodes
             .filter((n) => n.media?.kind === "image")
             .map(async (n) => {
+                const media = n.media!;
                 try {
-                    images.set(n.id, await withTimeout(loadOne(n.media!.src), timeoutMs, n.media!.src));
+                    let src = media.src;
+                    const uploadId = media.uploadId ?? null;
+                    if (uploadId && resolveUpload) {
+                        src = await withTimeout(resolveUpload(uploadId), timeoutMs, uploadId);
+                        objectUrls.push(src);
+                    }
+                    images.set(n.id, await withTimeout(loadOne(src), timeoutMs, src));
                 } catch {
                     images.delete(n.id);
                     failedIds.push(n.id);
                 }
             }),
     );
-    return { images, failedIds };
+    return { images, failedIds, objectUrls };
+}
+
+export function revokeExportObjectUrls(urls: string[]): void {
+    for (const url of urls) {
+        try {
+            URL.revokeObjectURL(url);
+        } catch {
+            // Best-effort cleanup only.
+        }
+    }
 }
 
 export function mediaLoadWarningPure(names: string[]): string | null {

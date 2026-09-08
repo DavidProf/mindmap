@@ -2,6 +2,7 @@ import type { Node, NodeKind, NodeMedia, NodeSide } from "../types/node";
 import { isNodeKind, isNodeSide, normalizeNodes } from "../types/node";
 import type { Project, Viewport } from "../types/project";
 import type { StorageBackend } from "./backend";
+import type { MediaBlobStore } from "./mediaBlobs";
 import {
     bumpedIso,
     clampZoom,
@@ -114,7 +115,7 @@ export async function renameProjectAsync(backend: StorageBackend, id: string, ne
     return projects[idx];
 }
 
-export async function deleteProjectAsync(backend: StorageBackend, id: string): Promise<void> {
+export async function deleteProjectAsync(backend: StorageBackend, id: string, blobs?: MediaBlobStore): Promise<void> {
     const projects = await backend.loadProjects();
     const nodes = await backend.loadNodes();
     const remainingProjects = projects.filter((p) => p.id !== id);
@@ -122,6 +123,7 @@ export async function deleteProjectAsync(backend: StorageBackend, id: string): P
     await backend.saveProjects(remainingProjects);
     await backend.saveNodes(remainingNodes);
     mirrorToLocalStorage(remainingProjects, remainingNodes);
+    await blobs?.deleteBlobsForProject(id).catch(() => undefined);
 }
 
 export async function addChildNodeAsync(
@@ -256,7 +258,7 @@ export async function setNodeMediaAsync(
     const idx = nodes.findIndex((n) => n.id === nodeId);
     if (idx === -1) throw new Error("Node not found.");
 
-    const err = validateNodeMediaPure(media?.kind ?? null, media?.src ?? null);
+    const err = validateNodeMediaPure(media?.kind ?? null, media?.src ?? null, media?.uploadId ?? null);
     if (err) throw new Error(err);
     const nextMedia = normalizeNodeMediaPure(media);
     const prevMedia = nodes[idx].media ?? null;
@@ -265,7 +267,8 @@ export async function setNodeMediaAsync(
         (nextMedia !== null &&
             prevMedia !== null &&
             nextMedia.kind === prevMedia.kind &&
-            nextMedia.src === prevMedia.src);
+            nextMedia.src === prevMedia.src &&
+            (nextMedia.uploadId ?? null) === (prevMedia.uploadId ?? null));
     if (same) return nodes[idx];
 
     const updated: Node = { ...nodes[idx], media: nextMedia, updatedAt: bumpedIso(nodes[idx].updatedAt) };
@@ -302,7 +305,11 @@ export async function setNodeCollapsedAsync(backend: StorageBackend, nodeId: str
     return updated;
 }
 
-export async function deleteNodeSubtreeAsync(backend: StorageBackend, nodeId: string): Promise<{ deletedIds: string[] }> {
+export async function deleteNodeSubtreeAsync(
+    backend: StorageBackend,
+    nodeId: string,
+    blobs?: MediaBlobStore,
+): Promise<{ deletedIds: string[] }> {
     const nodes = await backend.loadNodes();
     const target = nodes.find((n) => n.id === nodeId);
     if (!target) throw new Error("Node not found.");
@@ -319,6 +326,7 @@ export async function deleteNodeSubtreeAsync(backend: StorageBackend, nodeId: st
         await backend.saveProjects(projects);
         mirrorToLocalStorage(projects, remaining);
     }
+    await blobs?.deleteBlobsForNodeIds([...ids]).catch(() => undefined);
     return { deletedIds: [...ids] };
 }
 

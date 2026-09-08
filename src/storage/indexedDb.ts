@@ -4,10 +4,13 @@ import type { Project } from "../types/project";
 import type { StorageBackend } from "./backend";
 
 export const IDB_NAME = "mindmap";
-export const IDB_VERSION = 1;
+export const IDB_VERSION = 2;
 export const IDB_PROJECTS_STORE = "projects";
 export const IDB_NODES_STORE = "nodes";
+export const IDB_MEDIA_STORE = "media";
 export const IDB_BY_PROJECT_INDEX = "by-project";
+export const IDB_MEDIA_BY_PROJECT_INDEX = "media-by-project";
+export const IDB_MEDIA_BY_NODE_INDEX = "media-by-node";
 
 export function isIndexedDbSupported(): boolean {
     return typeof indexedDB !== "undefined";
@@ -44,6 +47,13 @@ export function openMindmapDb(): Promise<IDBDatabase> {
             if (!db.objectStoreNames.contains(IDB_NODES_STORE)) {
                 const store = db.createObjectStore(IDB_NODES_STORE, { keyPath: "id" });
                 store.createIndex(IDB_BY_PROJECT_INDEX, "projectId", { unique: false });
+            }
+            // v2 addition: uploaded image blobs. Created when missing so
+            // existing v1 databases upgrade without touching projects/nodes.
+            if (!db.objectStoreNames.contains(IDB_MEDIA_STORE)) {
+                const store = db.createObjectStore(IDB_MEDIA_STORE, { keyPath: "id" });
+                store.createIndex(IDB_MEDIA_BY_PROJECT_INDEX, "projectId", { unique: false });
+                store.createIndex(IDB_MEDIA_BY_NODE_INDEX, "nodeId", { unique: false });
             }
         };
         request.onsuccess = () => resolve(request.result);

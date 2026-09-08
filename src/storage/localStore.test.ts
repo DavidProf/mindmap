@@ -12,12 +12,15 @@ import {
     loadProjects,
     MAX_MEDIA_URL_LENGTH,
     MAX_NOTE_TEXT_LENGTH,
+    MAX_UPLOAD_BYTES,
     MAX_URL_LENGTH,
     maxTextLengthForKind,
+    fitDimensionsPure,
     normalizeNodeMediaPure,
     normalizeNodeUrlPure,
     saveNodes,
     saveProjects,
+    validateImageFilePure,
     validateNodeMediaPure,
     validateNodeTextPure,
     validateNodeUrlPure,
@@ -241,6 +244,7 @@ describe("node media (13c)", () => {
         expect(normalizeNodeMediaPure({ kind: "image", src: "https://example.com/a.png" })).toEqual({
             kind: "image",
             src: "https://example.com/a.png",
+            uploadId: null,
         });
     });
     it("prepends https for bare domains", () => {
@@ -248,6 +252,7 @@ describe("node media (13c)", () => {
         expect(normalizeNodeMediaPure({ kind: "video", src: "example.com/v" })).toEqual({
             kind: "video",
             src: "https://example.com/v",
+            uploadId: null,
         });
     });
     it("rejects bad kinds and dangerous schemes", () => {
@@ -276,21 +281,76 @@ describe("node media (13c)", () => {
         const bad = { ...node("a", "p1", null), media: { kind: "image", src: "javascript:alert(1)" } };
         const good = {
             ...node("b", "p1", null),
-            media: { kind: "video" as const, src: "https://example.com/v" },
+            media: { kind: "video" as const, src: "https://example.com/v", uploadId: null },
         };
         const out = normalizeNodes([bad as unknown as Node, good]);
         expect(out[0].media).toBeNull();
-        expect(out[1].media).toEqual({ kind: "video", src: "https://example.com/v" });
+        expect(out[1].media).toEqual({ kind: "video", src: "https://example.com/v", uploadId: null });
     });
     it("round-trips media through storage", () => {
         __resetForTests();
         stubWindow();
         const withMedia = {
             ...node("n1", "p1", null),
-            media: { kind: "image" as const, src: "https://example.com/a.png" },
+            media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null },
         };
         saveNodes([withMedia]);
         expect(loadNodes()).toEqual([withMedia]);
+    });
+});
+
+describe("node upload media (13d)", () => {
+    it("keeps valid upload refs and ignores src", () => {
+        expect(normalizeNodeMediaValue({ kind: "image", src: "https://example.com/a.png", uploadId: "blob-1" })).toEqual({
+            kind: "image",
+            src: "",
+            uploadId: "blob-1",
+        });
+        expect(validateNodeMediaPure("image", "", "blob-1")).toBeNull();
+    });
+    it("rejects video uploads and blank ids", () => {
+        expect(normalizeNodeMediaValue({ kind: "video", src: "", uploadId: "blob-1" })).toBeNull();
+        expect(normalizeNodeMediaValue({ kind: "image", src: "", uploadId: "  " })).toBeNull();
+        expect(validateNodeMediaPure("video", "", "blob-1")).toBe("Choose image or video.");
+    });
+    it("coerces missing uploadId to null without rewriting url media", () => {
+        const urlMedia = { ...node("u", "p1", null), media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null } };
+        expect(normalizeNodes([urlMedia])[0]).toBe(urlMedia);
+    });
+});
+
+describe("image file validation (13d)", () => {
+    it("accepts listed types under the cap", () => {
+        for (const type of ["image/png", "image/jpeg", "image/webp", "image/gif"]) {
+            expect(validateImageFilePure({ type, size: 1024 })).toBeNull();
+        }
+    });
+    it("rejects svg, wrong types, empty, and oversize files", () => {
+        expect(validateImageFilePure({ type: "image/svg+xml", size: 1024 })).toBe(
+            "Choose a PNG, JPEG, WEBP, or GIF image.",
+        );
+        expect(validateImageFilePure({ type: "video/mp4", size: 1024 })).toBe(
+            "Choose a PNG, JPEG, WEBP, or GIF image.",
+        );
+        expect(validateImageFilePure({ type: "image/png", size: 0 })).toBe("That file looks empty.");
+        expect(validateImageFilePure({ type: "image/png", size: MAX_UPLOAD_BYTES + 1 })).toBe(
+            "Image must be 12MB or smaller.",
+        );
+    });
+});
+
+describe("fitDimensionsPure (13d)", () => {
+    it("leaves small images untouched", () => {
+        expect(fitDimensionsPure(800, 600, 1024)).toEqual({ width: 800, height: 600 });
+    });
+    it("scales landscape, portrait, and square to the longest side", () => {
+        expect(fitDimensionsPure(2048, 1024, 1024)).toEqual({ width: 1024, height: 512 });
+        expect(fitDimensionsPure(1000, 2000, 1024)).toEqual({ width: 512, height: 1024 });
+        expect(fitDimensionsPure(3000, 3000, 1024)).toEqual({ width: 1024, height: 1024 });
+    });
+    it("returns zeros for invalid input", () => {
+        expect(fitDimensionsPure(0, 100, 1024)).toEqual({ width: 0, height: 0 });
+        expect(fitDimensionsPure(NaN, 100, 1024)).toEqual({ width: 0, height: 0 });
     });
 });
 

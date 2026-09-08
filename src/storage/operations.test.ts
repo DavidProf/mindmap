@@ -17,6 +17,7 @@ import {
     updateNodeTextAsync,
 } from "./operations";
 import { createLocalStorageBackend, createMemoryBackend } from "./backend";
+import { createMemoryMediaBlobStore } from "./mediaBlobs";
 import { __resetForTests, loadNodes, loadProjects } from "./localStore";
 import type { Project, Viewport } from "../types/project";
 
@@ -318,8 +319,8 @@ describe("node url (13b)", () => {
         const project = await createProjectAsync(backend, "Alpha");
         const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
         const before = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
-        const imaged = await setNodeMediaAsync(backend, child.id, { kind: "image", src: "example.com/a.png" });
-        expect(imaged.media).toEqual({ kind: "image", src: "https://example.com/a.png" });
+        const imaged = await setNodeMediaAsync(backend, child.id, { kind: "image", src: "example.com/a.png", uploadId: null });
+        expect(imaged.media).toEqual({ kind: "image", src: "https://example.com/a.png", uploadId: null });
         const after = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
         expect(Date.parse(after) >= Date.parse(before)).toBe(true);
         const cleared = await setNodeMediaAsync(backend, child.id, null);
@@ -330,24 +331,68 @@ describe("node url (13b)", () => {
         const project = await createProjectAsync(backend, "Alpha");
         const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
         await expect(
-            setNodeMediaAsync(backend, child.id, { kind: "image", src: "javascript:alert(1)" }),
+            setNodeMediaAsync(backend, child.id, { kind: "image", src: "javascript:alert(1)", uploadId: null }),
         ).rejects.toThrow("Enter a valid http(s) URL.");
         await expect(
-            setNodeMediaAsync(backend, child.id, { kind: "audio" as unknown as "image", src: "https://example.com/a.mp3" }),
+            setNodeMediaAsync(backend, child.id, { kind: "audio" as unknown as "image", src: "https://example.com/a.mp3", uploadId: null }),
         ).rejects.toThrow("Choose image or video.");
         await expect(
-            setNodeMediaAsync(backend, "missing", { kind: "video", src: "https://example.com/v.mp4" }),
+            setNodeMediaAsync(backend, "missing", { kind: "video", src: "https://example.com/v.mp4", uploadId: null }),
         ).rejects.toThrow("Node not found.");
     });
     it("preserves media across kind convert and url set", async () => {
         const backend = createMemoryBackend();
         const project = await createProjectAsync(backend, "Alpha");
         const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
-        await setNodeMediaAsync(backend, child.id, { kind: "video", src: "https://example.com/v.mp4" });
+        await setNodeMediaAsync(backend, child.id, { kind: "video", src: "https://example.com/v.mp4", uploadId: null });
         const note = await setNodeKindAsync(backend, child.id, "note");
-        expect(note.media).toEqual({ kind: "video", src: "https://example.com/v.mp4" });
+        expect(note.media).toEqual({ kind: "video", src: "https://example.com/v.mp4", uploadId: null });
         const linked = await setNodeUrlAsync(backend, child.id, "https://example.com");
-        expect(linked.media).toEqual({ kind: "video", src: "https://example.com/v.mp4" });
+        expect(linked.media).toEqual({ kind: "video", src: "https://example.com/v.mp4", uploadId: null });
+    });
+    it("sets and clears upload media with project bump", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const uploaded = await setNodeMediaAsync(backend, child.id, { kind: "image", src: "", uploadId: "blob-1" });
+        expect(uploaded.media).toEqual({ kind: "image", src: "", uploadId: "blob-1" });
+        const cleared = await setNodeMediaAsync(backend, child.id, null);
+        expect(cleared.media).toBeNull();
+    });
+    it("rejects video uploads", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        await expect(
+            setNodeMediaAsync(backend, child.id, { kind: "video", src: "", uploadId: "blob-1" }),
+        ).rejects.toThrow("Choose image or video.");
+    });
+});
+
+describe("upload blob GC (13d)", () => {
+    it("deletes subtree blobs but keeps the rest", async () => {
+        const backend = createMemoryBackend();
+        const blobs = createMemoryMediaBlobStore();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const other = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Other", "north");
+        await setNodeMediaAsync(backend, child.id, { kind: "image", src: "", uploadId: "blob-1" });
+        await setNodeMediaAsync(backend, other.id, { kind: "image", src: "", uploadId: "blob-2" });
+        await blobs.saveBlob({ id: "blob-1", projectId: project.id, nodeId: child.id, blob: new Blob(["a"]), createdAt: STAMP });
+        await blobs.saveBlob({ id: "blob-2", projectId: project.id, nodeId: other.id, blob: new Blob(["b"]), createdAt: STAMP });
+        await deleteNodeSubtreeAsync(backend, child.id, blobs);
+        expect(await blobs.loadBlob("blob-1")).toBeNull();
+        expect(await blobs.loadBlob("blob-2")).not.toBeNull();
+    });
+    it("deletes project blobs", async () => {
+        const backend = createMemoryBackend();
+        const blobs = createMemoryMediaBlobStore();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        await setNodeMediaAsync(backend, child.id, { kind: "image", src: "", uploadId: "blob-1" });
+        await blobs.saveBlob({ id: "blob-1", projectId: project.id, nodeId: child.id, blob: new Blob(["a"]), createdAt: STAMP });
+        await deleteProjectAsync(backend, project.id, blobs);
+        expect(await blobs.countBlobs()).toBe(0);
     });
 });
 

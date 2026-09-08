@@ -194,7 +194,10 @@ export function normalizeNodeUrlPure(raw: string | null | undefined): string | n
     return normalizeNodeUrlValue(raw);
 }
 
-export function validateNodeMediaPure(kind: unknown, src: unknown): string | null {
+export function validateNodeMediaPure(kind: unknown, src: unknown, uploadId: unknown = null): string | null {
+    if (typeof uploadId === "string" && uploadId.trim().length > 0) {
+        return kind === "image" ? null : "Choose image or video.";
+    }
     if (src === null || src === undefined) return null;
     if (typeof src === "string" && src.trim().length === 0) return null;
     if (!isNodeMediaKind(kind)) return "Choose image or video.";
@@ -203,6 +206,33 @@ export function validateNodeMediaPure(kind: unknown, src: unknown): string | nul
     if (trimmed.length > MAX_MEDIA_URL_LENGTH) return `Media URL must be ${MAX_MEDIA_URL_LENGTH} characters or less.`;
     if (normalizeNodeUrlValue(trimmed) === null) return "Enter a valid http(s) URL.";
     return null;
+}
+
+export const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+export const UPLOAD_MIME_ALLOWLIST = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
+export const UPLOAD_MAX_SIDE = 1024;
+
+export function validateImageFilePure(file: { type: string; size: number }): string | null {
+    if (!(UPLOAD_MIME_ALLOWLIST as readonly string[]).includes(file.type)) {
+        return "Choose a PNG, JPEG, WEBP, or GIF image.";
+    }
+    if (!Number.isFinite(file.size) || file.size <= 0) return "That file looks empty.";
+    if (file.size > MAX_UPLOAD_BYTES) return "Image must be 12MB or smaller.";
+    return null;
+}
+
+export function fitDimensionsPure(
+    width: number,
+    height: number,
+    maxSide: number = UPLOAD_MAX_SIDE,
+): { width: number; height: number } {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        return { width: 0, height: 0 };
+    }
+    const longest = Math.max(width, height);
+    if (longest <= maxSide) return { width: Math.round(width), height: Math.round(height) };
+    const scale = maxSide / longest;
+    return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
 export function normalizeNodeMediaPure(value: unknown): NodeMedia | null {

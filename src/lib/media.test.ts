@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     loadExportMediaImages,
     mediaLoadWarningPure,
+    revokeExportObjectUrls,
     youtubeShortlinkPure,
     youtubeVideoIdPure,
 } from "./media";
@@ -13,8 +14,8 @@ function fakeImage(): HTMLImageElement {
 describe("loadExportMediaImages", () => {
     it("loads image media and skips video and bare nodes", async () => {
         const nodes = [
-            { id: "a", media: { kind: "image" as const, src: "https://example.com/a.png" } },
-            { id: "b", media: { kind: "video" as const, src: "https://example.com/v.mp4" } },
+            { id: "a", media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null } },
+            { id: "b", media: { kind: "video" as const, src: "https://example.com/v.mp4", uploadId: null } },
             { id: "c", media: null },
         ];
         const seen: string[] = [];
@@ -30,8 +31,8 @@ describe("loadExportMediaImages", () => {
     });
     it("collects failures instead of rejecting", async () => {
         const nodes = [
-            { id: "good", media: { kind: "image" as const, src: "https://example.com/ok.png" } },
-            { id: "bad", media: { kind: "image" as const, src: "https://example.com/missing.png" } },
+            { id: "good", media: { kind: "image" as const, src: "https://example.com/ok.png", uploadId: null } },
+            { id: "bad", media: { kind: "image" as const, src: "https://example.com/missing.png", uploadId: null } },
         ];
         const res = await loadExportMediaImages(nodes, {
             loadOne: (src) =>
@@ -41,7 +42,7 @@ describe("loadExportMediaImages", () => {
         expect(res.failedIds).toEqual(["bad"]);
     });
     it("times out slow hosts", async () => {
-        const nodes = [{ id: "slow", media: { kind: "image" as const, src: "https://example.com/slow.png" } }];
+        const nodes = [{ id: "slow", media: { kind: "image" as const, src: "https://example.com/slow.png", uploadId: null } }];
         const res = await loadExportMediaImages(nodes, {
             timeoutMs: 10,
             loadOne: () => new Promise<never>(() => undefined),
@@ -49,10 +50,47 @@ describe("loadExportMediaImages", () => {
         expect(res.images.size).toBe(0);
         expect(res.failedIds).toEqual(["slow"]);
     });
+    it("resolves upload refs to object urls and tracks them", async () => {
+        const nodes = [
+            { id: "up", media: { kind: "image" as const, src: "", uploadId: "blob-1" } },
+            { id: "gone", media: { kind: "image" as const, src: "", uploadId: "blob-2" } },
+        ];
+        const seen: string[] = [];
+        const res = await loadExportMediaImages(nodes, {
+            loadOne: (src) => {
+                seen.push(src);
+                return Promise.resolve(fakeImage());
+            },
+            resolveUpload: (uploadId) =>
+                uploadId === "blob-1" ? Promise.resolve("blob:upload-1") : Promise.reject(new Error("missing")),
+        });
+        expect(seen).toEqual(["blob:upload-1"]);
+        expect([...res.images.keys()]).toEqual(["up"]);
+        expect(res.failedIds).toEqual(["gone"]);
+        expect(res.objectUrls).toEqual(["blob:upload-1"]);
+    });
 });
 
-describe("mediaLoadWarningPure", () => {
-    it("returns null with no names", () => {
+describe("revokeExportObjectUrls", () => {
+    it("revokes every url and tolerates an empty list", () => {
+        const revoked: string[] = [];
+        const original = URL.revokeObjectURL;
+        URL.revokeObjectURL = (url: string) => {
+            revoked.push(url);
+        };
+        try {
+            revokeExportObjectUrls(["blob:a", "blob:b"]);
+            expect(revoked).toEqual(["blob:a", "blob:b"]);
+            revokeExportObjectUrls([]);
+            expect(revoked).toEqual(["blob:a", "blob:b"]);
+        } finally {
+            URL.revokeObjectURL = original;
+        }
+        expect(vi.isMockFunction(URL.revokeObjectURL)).toBe(false);
+    });
+});
+
+describe("mediaLoadWarningPure", () => {    it("returns null with no names", () => {
         expect(mediaLoadWarningPure([])).toBeNull();
         expect(mediaLoadWarningPure(["  "])).toBeNull();
     });

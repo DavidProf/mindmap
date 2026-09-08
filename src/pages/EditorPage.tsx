@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Alert } from "@mui/material";
 import AppHeader from "../components/layout/AppHeader";
@@ -17,9 +17,12 @@ import {
     updateNodeTextAsync,
 } from "../storage/operations";
 import type { StorageBackend } from "../storage/backend";
+import { createIdbMediaBlobStore } from "../storage/mediaBlobs";
+import { genId, nowIso, validateImageFilePure } from "../storage/localStore";
+import { downscaleImageFile } from "../lib/images";
 import { computeLayout } from "../lib/layout";
 import { exportMapAsPng, paddedExportBounds, renderMapToCanvas, resolveExportScale } from "../lib/exportPng";
-import { loadExportMediaImages, mediaLoadWarningPure } from "../lib/media";
+import { loadExportMediaImages, mediaLoadWarningPure, revokeExportObjectUrls } from "../lib/media";
 import type { Project, Viewport } from "../types/project";
 import type { Node, NodeKind, NodeMedia, NodeSide } from "../types/node";
 import "./EditorPage.css";
@@ -101,6 +104,26 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
     const [downloadError, setDownloadError] = useState<string | null>(null);
     const [mediaWarning, setMediaWarning] = useState<string | null>(null);
     const exportTokenRef = useRef(0);
+    const [blobStore] = useState(() => createIdbMediaBlobStore());
+    const canUpload = fallback === "indexeddb";
+
+    const loadBlob = useCallback(
+        (uploadId: string): Promise<Blob | null> =>
+            blobStore
+                .loadBlob(uploadId)
+                .then((record) => record?.blob ?? null)
+                .catch(() => null),
+        [blobStore],
+    );
+
+    const resolveUploadUrl = useCallback(
+        (uploadId: string): Promise<string> =>
+            blobStore.loadBlob(uploadId).then((record) => {
+                if (!record) throw new Error(`Missing upload ${uploadId}`);
+                return URL.createObjectURL(record.blob);
+            }),
+        [blobStore],
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -184,15 +207,52 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         }
     }
 
+    async function replaceNodeMedia(nodeId: string, media: NodeMedia | null): Promise<Node | null> {
+        const previous = nodes?.find((n) => n.id === nodeId)?.media ?? null;
+        const updated = await setNodeMediaAsync(backend, nodeId, media);
+        const previousUploadId = previous?.uploadId ?? null;
+        const nextUploadId = updated.media?.uploadId ?? null;
+        if (previousUploadId && previousUploadId !== nextUploadId) {
+            await blobStore.deleteBlob(previousUploadId).catch(() => undefined);
+        }
+        return updated;
+    }
+
     async function handleSetMedia(nodeId: string, media: NodeMedia | null): Promise<Node | null> {
         try {
-            const updated = await setNodeMediaAsync(backend, nodeId, media);
+            const updated = await replaceNodeMedia(nodeId, media);
             await refreshNodes();
             setError(null);
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not save media."));
             return null;
+        }
+    }
+
+    async function handleUploadMedia(nodeId: string, file: File): Promise<string | null> {
+        const invalid = validateImageFilePure(file);
+        if (invalid) return invalid;
+        const node = nodes?.find((n) => n.id === nodeId) ?? null;
+        if (!node) return "Node not found.";
+        let pixels: Blob;
+        try {
+            pixels = await downscaleImageFile(file);
+        } catch (e) {
+            return e instanceof Error ? e.message : "Could not read that image file.";
+        }
+        const uploadId = genId();
+        try {
+            await blobStore.saveBlob({ id: uploadId, projectId: node.projectId, nodeId, blob: pixels, createdAt: nowIso() });
+            await replaceNodeMedia(nodeId, { kind: "image", src: "", uploadId });
+            await refreshNodes();
+            setError(null);
+            return null;
+        } catch (e) {
+            await blobStore.deleteBlob(uploadId).catch(() => undefined);
+            const message = toEditorError(e, "Could not save the uploaded image.");
+            setError(message);
+            return message;
         }
     }
 
@@ -213,7 +273,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
 
     async function handleDeleteSubtree(nodeId: string): Promise<{ deletedIds: string[] } | null> {
         try {
-            const res = await deleteNodeSubtreeAsync(backend, nodeId);
+            const res = await deleteNodeSubtreeAsync(backend, nodeId, blobStore);
             await refreshNodes();
             setError(null);
             return res;
@@ -270,10 +330,12 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         setDownloadError(null);
         setMediaWarning(null);
         setPreviewOpen(true);
+        let objectUrls: string[] = [];
         try {
             const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
             const scale = resolveExportScale(paddedExportBounds(layout.bounds), dpr);
-            const loaded = await loadExportMediaImages(visibleNodes);
+            const loaded = await loadExportMediaImages(visibleNodes, { resolveUpload: resolveUploadUrl });
+            objectUrls = loaded.objectUrls;
             if (token !== exportTokenRef.current) return;
             const canvas = renderMapToCanvas({
                 nodes: visibleNodes,
@@ -290,6 +352,8 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
             const message = e instanceof Error ? e.message : "Could not render preview.";
             setPreviewError(message);
             setError(message);
+        } finally {
+            revokeExportObjectUrls(objectUrls);
         }
     }
 
@@ -305,8 +369,10 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         if (exporting) return;
         setExporting(true);
         setDownloadError(null);
+        let objectUrls: string[] = [];
         try {
-            const loaded = await loadExportMediaImages(visibleNodes);
+            const loaded = await loadExportMediaImages(visibleNodes, { resolveUpload: resolveUploadUrl });
+            objectUrls = loaded.objectUrls;
             await exportMapAsPng({
                 projectName: project.name,
                 nodes: visibleNodes,
@@ -325,6 +391,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
             setDownloadError(message);
             setError(message);
         } finally {
+            revokeExportObjectUrls(objectUrls);
             setExporting(false);
         }
     }
@@ -379,6 +446,9 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
                     onSetKind={handleSetKind}
                     onSetUrl={handleSetUrl}
                     onSetMedia={handleSetMedia}
+                    onUploadMedia={(nodeId, file) => handleUploadMedia(nodeId, file)}
+                    loadBlob={loadBlob}
+                    canUpload={canUpload}
                     onToggleCollapsed={handleToggleCollapsed}
                     onDeleteSubtree={handleDeleteSubtree}
                 />
