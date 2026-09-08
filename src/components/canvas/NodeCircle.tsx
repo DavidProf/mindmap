@@ -1,12 +1,14 @@
 import { NODE_DIAMETER } from "../../lib/layout";
 import type { NodeSide } from "../../types/node";
 import NodeEditor from "./NodeEditor";
+import NodeLinkBadge from "./NodeLinkBadge";
 import { PLUS_POSITIONS, useNodeGestures } from "./useNodeGestures";
 import "./TreeCanvas.css";
 
 type NodeCircleProps = {
     id: string;
     text: string;
+    url: string | null;
     x: number;
     y: number;
     selected: boolean;
@@ -18,6 +20,7 @@ type NodeCircleProps = {
     onCancelEdit: (id: string) => void;
     onContextMenu: (id: string, x: number, y: number) => void;
     onToggleCollapsed: (id: string) => void;
+    onOpenLink: (id: string) => void;
     collapsed: boolean;
     hiddenCount: number;
 };
@@ -25,6 +28,7 @@ type NodeCircleProps = {
 export default function NodeCircle({
     id,
     text,
+    url,
     x,
     y,
     selected,
@@ -36,6 +40,7 @@ export default function NodeCircle({
     onCancelEdit,
     onContextMenu,
     onToggleCollapsed,
+    onOpenLink,
     collapsed,
     hiddenCount,
 }: NodeCircleProps) {
@@ -80,6 +85,7 @@ export default function NodeCircle({
                     <span className="node-circle__text">{text}</span>
                 )}
             </div>
+            {url && <NodeLinkBadge text={text} url={url} onOpen={() => onOpenLink(id)} />}
             {collapsed && hiddenCount > 0 && (
                 <button
                     type="button"

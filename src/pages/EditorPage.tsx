@@ -12,6 +12,7 @@ import {
     isQuotaError,
     setNodeCollapsedAsync,
     setNodeKindAsync,
+    setNodeUrlAsync,
     updateNodeTextAsync,
 } from "../storage/operations";
 import type { StorageBackend } from "../storage/backend";
@@ -163,6 +164,18 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not convert node."));
+            return null;
+        }
+    }
+
+    async function handleSetUrl(nodeId: string, url: string | null): Promise<Node | null> {
+        try {
+            const updated = await setNodeUrlAsync(backend, nodeId, url);
+            await refreshNodes();
+            setError(null);
+            return updated;
+        } catch (e) {
+            setError(toEditorError(e, "Could not save link."));
             return null;
         }
     }
@@ -326,6 +339,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
                     onAddChild={handleAddChild}
                     onUpdateText={handleUpdateText}
                     onSetKind={handleSetKind}
+                    onSetUrl={handleSetUrl}
                     onToggleCollapsed={handleToggleCollapsed}
                     onDeleteSubtree={handleDeleteSubtree}
                 />

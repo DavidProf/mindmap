@@ -106,6 +106,28 @@ export function wrapNoteLinesPure(text: string): string[] {
     return wrapLinesPure(text, NOTE_MAX_CHARS_PER_LINE, NOTE_MAX_LINES);
 }
 
+export const LINK_BADGE_RADIUS = 8;
+export const LINK_BADGE_GLYPH = "↗";
+
+export function shouldDrawLinkBadge(url: unknown): boolean {
+    return typeof url === "string" && url.trim().length > 0;
+}
+
+export function linkBadgeCenterPure(
+    cx: number,
+    cy: number,
+    scale: number,
+    kind: "circle" | "note",
+): { x: number; y: number; radius: number } {
+    const radius = LINK_BADGE_RADIUS * scale;
+    if (kind === "note") {
+        const rect = noteRectForExport(cx, cy, scale);
+        return { x: rect.x + rect.width - radius - 2 * scale, y: rect.y + radius + 2 * scale, radius };
+    }
+    const nodeRadius = (NODE_DIAMETER / 2) * scale;
+    return { x: cx + nodeRadius * 0.65, y: cy - nodeRadius * 0.65, radius };
+}
+
 export function noteRectForExport(
     cx: number,
     cy: number,
@@ -224,13 +246,29 @@ export function renderMapToCanvas(args: {
         }
 
         const lines = isNote ? wrapNoteLinesPure(node.text) : wrapLinesPure(node.text);
-        if (lines.length === 0) continue;
-        ctx.fillStyle = EXPORT_TEXT_COLOR;
-        const lineHeight = fontSize * 1.2;
-        const startY = cy - ((lines.length - 1) * lineHeight) / 2;
-        const maxWidth = isNote ? NOTE_WIDTH * scale - 24 * scale : radius * 2 - 8 * scale;
-        for (let i = 0; i < lines.length; i++) {
-            ctx.fillText(lines[i], cx, startY + i * lineHeight, maxWidth);
+        if (lines.length > 0) {
+            ctx.fillStyle = EXPORT_TEXT_COLOR;
+            const lineHeight = fontSize * 1.2;
+            const startY = cy - ((lines.length - 1) * lineHeight) / 2;
+            const maxWidth = isNote ? NOTE_WIDTH * scale - 24 * scale : radius * 2 - 8 * scale;
+            for (let i = 0; i < lines.length; i++) {
+                ctx.fillText(lines[i], cx, startY + i * lineHeight, maxWidth);
+            }
+        }
+
+        if (shouldDrawLinkBadge(node.url)) {
+            const badge = linkBadgeCenterPure(cx, cy, scale, isNote ? "note" : "circle");
+            ctx.beginPath();
+            ctx.arc(badge.x, badge.y, badge.radius, 0, Math.PI * 2);
+            ctx.fillStyle = background;
+            ctx.fill();
+            ctx.strokeStyle = EXPORT_NODE_STROKE;
+            ctx.lineWidth = 1 * scale;
+            ctx.stroke();
+            ctx.fillStyle = EXPORT_TEXT_COLOR;
+            ctx.font = `${badge.radius * 1.1}px ${EXPORT_FONT_FAMILY}`;
+            ctx.fillText(LINK_BADGE_GLYPH, badge.x, badge.y);
+            ctx.font = `${fontSize}px ${EXPORT_FONT_FAMILY}`;
         }
     }
 

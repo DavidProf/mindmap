@@ -5,7 +5,9 @@
 
 import type { Project, Viewport } from "../types/project";
 import type { Node, NodeKind } from "../types/node";
-import { isNodeKind, normalizeNodes } from "../types/node";
+import { isNodeKind, MAX_URL_LENGTH, normalizeNodes, normalizeNodeUrlValue } from "../types/node";
+
+export { MAX_URL_LENGTH };
 
 const PROJECTS_KEY = "mindmap:projects";
 const NODES_KEY = "mindmap:nodes";
@@ -168,6 +170,20 @@ export function validateNodeTextPure(raw: string, kind: NodeKind = "circle"): st
     const max = maxTextLengthForKind(kind);
     if (trimmed.length > max) return `Text must be ${max} characters or less.`;
     return null;
+}
+
+export function validateNodeUrlPure(raw: string | null | undefined): string | null {
+    if (raw === null || raw === undefined) return null;
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return null;
+    if (trimmed.length > MAX_URL_LENGTH) return `URL must be ${MAX_URL_LENGTH} characters or less.`;
+    if (normalizeNodeUrlValue(trimmed) === null) return "Enter a valid http(s) URL.";
+    return null;
+}
+
+export function normalizeNodeUrlPure(raw: string | null | undefined): string | null {
+    if (raw === null || raw === undefined) return null;
+    return normalizeNodeUrlValue(raw);
 }
 
 export function bumpedIso(prevUpdated: string): string {

@@ -15,6 +15,9 @@ import NodeConvertDialog from "./NodeConvertDialog";
 import type { NodeConvertTarget } from "./NodeConvertDialog";
 import NodeDeleteDialog from "./NodeDeleteDialog";
 import type { NodeDeleteTarget } from "./NodeDeleteDialog";
+import NodeLinkDialog from "./NodeLinkDialog";
+import type { NodeLinkTarget } from "./NodeLinkDialog";
+import { openNodeUrl } from "../../lib/link";
 import "./TreeCanvas.css";
 
 type TreeCanvasProps = {
@@ -30,17 +33,19 @@ type TreeCanvasProps = {
     onAddChild?: (parentId: string, text: string, side: NodeSide) => Promise<Node | null>;
     onUpdateText?: (nodeId: string, text: string) => Promise<Node | null>;
     onSetKind?: (nodeId: string, kind: NodeKind, opts?: { allowTruncate?: boolean }) => Promise<Node | null>;
+    onSetUrl?: (nodeId: string, url: string | null) => Promise<Node | null>;
     onToggleCollapsed?: (nodeId: string) => Promise<Node | null>;
     onDeleteSubtree?: (nodeId: string) => Promise<{ deletedIds: string[] } | null>;
 };
 
-export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
+export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onSetUrl, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [menu, setMenu] = useState<NodeMenuState | null>(null);
     const [convertTarget, setConvertTarget] = useState<NodeConvertTarget | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<NodeDeleteTarget | null>(null);
+    const [linkTarget, setLinkTarget] = useState<NodeLinkTarget | null>(null);
     const visibleNodes = nodes.filter((n) => positions.has(n.id));
 
     function closeMenu(focusNodeId?: string) {
@@ -159,6 +164,41 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         });
     }
 
+    function handleMenuLink() {
+        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
+        closeMenu(target?.id);
+        if (!target) return;
+        setLinkTarget({ nodeId: target.id, text: target.text, url: target.url ?? null });
+    }
+
+    function handleCancelLink() {
+        const target = linkTarget;
+        setLinkTarget(null);
+        if (target) focusCircle(target.nodeId);
+    }
+
+    async function handleSaveLink(url: string | null) {
+        const target = linkTarget;
+        if (!target) return;
+        setLinkTarget(null);
+        await onSetUrl?.(target.nodeId, url);
+        focusCircle(target.nodeId);
+    }
+
+    function handleOpenLink() {
+        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
+        const url = target?.url ?? null;
+        closeMenu(target?.id);
+        if (url) openNodeUrl(url);
+    }
+
+    async function handleRemoveLink() {
+        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
+        closeMenu(target?.id);
+        if (!target || !target.url) return;
+        await onSetUrl?.(target.id, null);
+    }
+
     function handleCancelDelete() {
         const target = deleteTarget;
         setDeleteTarget(null);
@@ -175,9 +215,14 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
             // The selection and editor must not point into a removed subtree.
             if (selectedId !== null && res.deletedIds.includes(selectedId)) setSelectedId(null);
             if (editingId !== null && res.deletedIds.includes(editingId)) setEditingId(null);
-            // Move focus out of the removed subtree: parent circle, else canvas.
+            // Move focus out of the removed subtree: parent shape, else canvas.
             requestAnimationFrame(() => {
-                if (parentId && document.querySelector(`[data-node-id="${parentId}"] .node-circle`)) {
+                if (
+                    parentId &&
+                    document.querySelector(
+                        `[data-node-id="${parentId}"] .node-circle, [data-node-id="${parentId}"] .node-rect`,
+                    )
+                ) {
                     focusCircle(parentId);
                 } else {
                     containerRef.current?.focus?.();
@@ -217,10 +262,18 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         focusCircle(nodeId);
     }
 
+    function handleOpenBadge(nodeId: string) {
+        const node = nodes.find((n) => n.id === nodeId) ?? null;
+        const url = node?.url ?? null;
+        if (url) openNodeUrl(url);
+    }
+
     function focusCircle(nodeId: string) {
-        // The circle div survives the editor/text swap, so focusing it keeps
+        // The shape div survives the editor/text swap, so focusing it keeps
         // keyboard users in the canvas flow instead of dropping to body.
-        const el = document.querySelector(`[data-node-id="${nodeId}"] .node-circle`);
+        const el = document.querySelector(
+            `[data-node-id="${nodeId}"] .node-circle, [data-node-id="${nodeId}"] .node-rect`,
+        );
         (el as HTMLElement | null)?.focus?.();
     }
 
@@ -278,6 +331,7 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                     const nodeProps = {
                         id: n.id,
                         text: n.text,
+                        url: n.url ?? null,
                         x: pos.x,
                         y: pos.y,
                         selected: selectedId === n.id,
@@ -289,6 +343,7 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                         onCancelEdit: handleCancelEdit,
                         onContextMenu: handleNodeContextMenu,
                         onToggleCollapsed: (id: string) => void onToggleCollapsed?.(id),
+                        onOpenLink: handleOpenBadge,
                         collapsed: n.collapsed,
                         hiddenCount: n.collapsed ? (subtreeCounts.get(n.id) ?? 1) - 1 : 0,
                     };
@@ -300,18 +355,28 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                     menu={menu}
                     text={menuTarget.text}
                     kind={menuTarget.kind}
+                    url={menuTarget.url ?? null}
                     collapsed={menuTarget.collapsed}
                     hasChildren={menuHasChildren}
                     isRoot={menuTarget.id === rootNodeId}
                     onClose={() => closeMenu(menu?.nodeId)}
                     onEdit={handleMenuEdit}
                     onConvert={(kind) => void handleMenuConvert(kind)}
+                    onEditLink={handleMenuLink}
+                    onOpenLink={handleOpenLink}
+                    onRemoveLink={() => void handleRemoveLink()}
                     onToggleCollapse={handleMenuToggleCollapse}
                     onDelete={handleMenuDelete}
                 />
             )}
             <NodeConvertDialog target={convertTarget} onCancel={handleCancelConvert} onConfirm={() => void handleConfirmConvert()} />
             <NodeDeleteDialog target={deleteTarget} onCancel={handleCancelDelete} onConfirm={handleConfirmDelete} />
+            <NodeLinkDialog
+                key={linkTarget ? `${linkTarget.nodeId}:${linkTarget.url ?? ""}` : "closed"}
+                target={linkTarget}
+                onCancel={handleCancelLink}
+                onSave={(url) => void handleSaveLink(url)}
+            />
             <div
                 className="tree-zoom-badge"
                 data-testid="zoom-badge"

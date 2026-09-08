@@ -10,10 +10,12 @@ import {
     getNodeCountForProjectPure,
     getSubtreeIdsPure,
     MAX_NODE_TEXT_LENGTH,
+    normalizeNodeUrlPure,
     nowIso,
     saveNodes,
     saveProjects,
     validateNodeTextPure,
+    validateNodeUrlPure,
     validateProjectNamePure,
 } from "./localStore";
 
@@ -68,6 +70,7 @@ export async function createProjectAsync(backend: StorageBackend, name: string):
         parentId: null,
         text: trimmed,
         kind: "circle",
+        url: null,
         side: null,
         collapsed: false,
         createdAt: now,
@@ -146,6 +149,7 @@ export async function addChildNodeAsync(
         parentId,
         text: text.trim(),
         kind,
+        url: null,
         side,
         collapsed: false,
         createdAt: now,
@@ -202,6 +206,30 @@ export async function setNodeKindAsync(
         text = text.trim().slice(0, MAX_NODE_TEXT_LENGTH);
     }
     const updated: Node = { ...nodes[idx], kind, text, updatedAt: bumpedIso(nodes[idx].updatedAt) };
+    nodes[idx] = updated;
+    await backend.saveNodes(nodes);
+
+    const projects = await backend.loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
+    if (pIdx !== -1) {
+        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+        await backend.saveProjects(projects);
+        mirrorToLocalStorage(projects, nodes);
+    }
+    return updated;
+}
+
+export async function setNodeUrlAsync(backend: StorageBackend, nodeId: string, url: string | null): Promise<Node> {
+    const nodes = normalizeNodes(await backend.loadNodes());
+    const idx = nodes.findIndex((n) => n.id === nodeId);
+    if (idx === -1) throw new Error("Node not found.");
+
+    const err = validateNodeUrlPure(url);
+    if (err) throw new Error(err);
+    const nextUrl = normalizeNodeUrlPure(url);
+    if ((nodes[idx].url ?? null) === nextUrl) return nodes[idx];
+
+    const updated: Node = { ...nodes[idx], url: nextUrl, updatedAt: bumpedIso(nodes[idx].updatedAt) };
     nodes[idx] = updated;
     await backend.saveNodes(nodes);
 

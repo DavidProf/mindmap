@@ -11,20 +11,23 @@ import {
     loadNodes,
     loadProjects,
     MAX_NOTE_TEXT_LENGTH,
+    MAX_URL_LENGTH,
     maxTextLengthForKind,
+    normalizeNodeUrlPure,
     saveNodes,
     saveProjects,
     validateNodeTextPure,
+    validateNodeUrlPure,
     validateProjectNamePure,
 } from "./localStore";
-import { isNodeKind, normalizeNodeKind, normalizeNodes } from "../types/node";
+import { isNodeKind, normalizeNodeKind, normalizeNodes, normalizeNodeUrlValue } from "../types/node";
 import type { Project, Viewport } from "../types/project";
 import type { Node } from "../types/node";
 
 const STAMP = "2026-01-01T00:00:00.000Z";
 
 function node(id: string, projectId: string, parentId: string | null): Node {
-    return { id, projectId, parentId, text: id, kind: "circle", side: "south", collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+    return { id, projectId, parentId, text: id, kind: "circle", url: null, side: "south", collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 function project(id: string, name: string, viewport: Viewport = { x: 0, y: 0, zoom: 1 }): Project {
@@ -151,6 +154,66 @@ describe("getNodeCountForProjectPure", () => {
         const nodes = [node("r1", "p1", null), node("c1", "p1", "r1"), node("r2", "p2", null)];
         expect(getNodeCountForProjectPure(nodes, "p1")).toBe(2);
         expect(getNodeCountForProjectPure(nodes, "p2")).toBe(1);
+    });
+});
+
+describe("node url (13b)", () => {
+    it("accepts empty as clear", () => {
+        expect(validateNodeUrlPure(null)).toBeNull();
+        expect(validateNodeUrlPure(undefined)).toBeNull();
+        expect(validateNodeUrlPure("   ")).toBeNull();
+        expect(normalizeNodeUrlPure(null)).toBeNull();
+        expect(normalizeNodeUrlPure("   ")).toBeNull();
+    });
+    it("accepts http and https urls", () => {
+        expect(validateNodeUrlPure("https://example.com")).toBeNull();
+        expect(validateNodeUrlPure("http://example.com/path?q=1")).toBeNull();
+        expect(normalizeNodeUrlPure("https://example.com")).toBe("https://example.com/");
+    });
+    it("prepends https for bare domains", () => {
+        expect(validateNodeUrlPure("example.com")).toBeNull();
+        expect(normalizeNodeUrlPure("example.com")).toBe("https://example.com/");
+    });
+    it("rejects dangerous and non-http schemes", () => {
+        expect(validateNodeUrlPure("javascript:alert(1)")).toBe("Enter a valid http(s) URL.");
+        expect(validateNodeUrlPure("data:text/plain,hi")).toBe("Enter a valid http(s) URL.");
+        expect(validateNodeUrlPure("ftp://example.com")).toBe("Enter a valid http(s) URL.");
+        expect(normalizeNodeUrlValue("javascript:alert(1)")).toBeNull();
+    });
+    it("rejects urls containing whitespace", () => {
+        expect(validateNodeUrlPure("not a url")).toBe("Enter a valid http(s) URL.");
+        expect(normalizeNodeUrlValue("not a url")).toBeNull();
+        expect(normalizeNodeUrlPure("has space.com")).toBeNull();
+    });
+    it("rejects over-length urls", () => {
+        const long = `https://example.com/${"x".repeat(MAX_URL_LENGTH)}`;
+        expect(validateNodeUrlPure(long)).toBe(`URL must be ${MAX_URL_LENGTH} characters or less.`);
+        expect(normalizeNodeUrlValue(long)).toBeNull();
+    });
+    it("normalizes legacy nodes missing url to null", () => {
+        const legacy = { ...node("r1", "p1", null), url: undefined as unknown as null };
+        const out = normalizeNodes([legacy as unknown as Node]);
+        expect(out[0].url).toBeNull();
+    });
+    it("normalizes invalid stored urls to null and keeps valid links", () => {
+        const bad = { ...node("a", "p1", null), url: "javascript:alert(1)" };
+        const good = { ...node("b", "p1", null), url: "https://example.com/" };
+        const out = normalizeNodes([bad, good]);
+        expect(out[0].url).toBeNull();
+        expect(out[1]).toBe(good);
+    });
+    it("loadNodes normalizes stored legacy url records", () => {
+        __resetForTests();
+        const legacy = { ...node("r1", "p1", null), url: "not a url" };
+        stubWindow({ "mindmap:nodes": JSON.stringify([legacy]) });
+        expect(loadNodes()[0].url).toBeNull();
+    });
+    it("round-trips a link through storage", () => {
+        __resetForTests();
+        stubWindow();
+        const linked = { ...node("n1", "p1", null), url: "https://example.com/" };
+        saveNodes([linked]);
+        expect(loadNodes()).toEqual([linked]);
     });
 });
 

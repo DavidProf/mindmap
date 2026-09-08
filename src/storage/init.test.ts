@@ -15,7 +15,7 @@ function project(id: string): Project {
 }
 
 function node(id: string, projectId: string): Node {
-    return { id, projectId, parentId: null, text: id, kind: "circle", side: null, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+    return { id, projectId, parentId: null, text: id, kind: "circle", url: null, side: null, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 beforeEach(() => {

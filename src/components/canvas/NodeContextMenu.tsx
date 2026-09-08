@@ -8,12 +8,16 @@ type NodeContextMenuProps = {
     menu: NodeMenuState | null;
     text: string;
     kind: NodeKind;
+    url: string | null;
     collapsed: boolean;
     hasChildren: boolean;
     isRoot: boolean;
     onClose: () => void;
     onEdit: () => void;
     onConvert: (kind: NodeKind) => void;
+    onEditLink: () => void;
+    onOpenLink: () => void;
+    onRemoveLink: () => void;
     onToggleCollapse: () => void;
     onDelete: () => void;
 };
@@ -22,12 +26,16 @@ export default function NodeContextMenu({
     menu,
     text,
     kind,
+    url,
     collapsed,
     hasChildren,
     isRoot,
     onClose,
     onEdit,
     onConvert,
+    onEditLink,
+    onOpenLink,
+    onRemoveLink,
     onToggleCollapse,
     onDelete,
 }: NodeContextMenuProps) {
@@ -41,6 +49,17 @@ export default function NodeContextMenu({
             <MenuItem onClick={onEdit} aria-label={`Edit "${text}"`}>
                 Edit
             </MenuItem>
+            <MenuItem onClick={onEditLink} aria-label={`${url ? "Edit link" : "Add link"} for "${text}"`}>
+                {url ? "Edit link" : "Add link"}
+            </MenuItem>
+            <MenuItem onClick={onOpenLink} disabled={!url} aria-label={`Open link for "${text}"`}>
+                Open link
+            </MenuItem>
+            {url && (
+                <MenuItem onClick={onRemoveLink} aria-label={`Remove link for "${text}"`}>
+                    Remove link
+                </MenuItem>
+            )}
             {kind === "note" ? (
                 <MenuItem onClick={() => onConvert("circle")} aria-label={`Convert "${text}" to circle`}>
                     Convert to circle

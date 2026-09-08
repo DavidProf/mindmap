@@ -11,6 +11,7 @@ import {
     renameProjectAsync,
     setNodeCollapsedAsync,
     setNodeKindAsync,
+    setNodeUrlAsync,
     setViewportAsync,
     updateNodeTextAsync,
 } from "./operations";
@@ -258,7 +259,50 @@ describe("node kind (13a)", () => {
             updatedAt: STAMP,
         };
         const backend = createMemoryBackend({ nodes: [legacy as never] });
-        expect((await backend.loadNodes())[0].kind).toBe("circle");
+        const loaded = (await backend.loadNodes())[0];
+        expect(loaded.kind).toBe("circle");
+        expect(loaded.url).toBeNull();
+    });
+});
+
+describe("node url (13b)", () => {
+    it("creates root and children with null url", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const root = (await backend.loadNodes()).find((n) => n.id === project.rootNodeId)!;
+        expect(root.url).toBeNull();
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        expect(child.url).toBeNull();
+    });
+    it("sets, normalizes, and clears a link with project bump", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const before = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
+        const linked = await setNodeUrlAsync(backend, child.id, "example.com");
+        expect(linked.url).toBe("https://example.com/");
+        const after = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
+        expect(Date.parse(after) >= Date.parse(before)).toBe(true);
+        const cleared = await setNodeUrlAsync(backend, child.id, "   ");
+        expect(cleared.url).toBeNull();
+        const clearedNull = await setNodeUrlAsync(backend, child.id, null);
+        expect(clearedNull.url).toBeNull();
+    });
+    it("rejects invalid urls and unknown nodes", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        await expect(setNodeUrlAsync(backend, child.id, "javascript:alert(1)")).rejects.toThrow("Enter a valid http(s) URL.");
+        await expect(setNodeUrlAsync(backend, child.id, "ftp://example.com")).rejects.toThrow("Enter a valid http(s) URL.");
+        await expect(setNodeUrlAsync(backend, "missing", "https://example.com")).rejects.toThrow("Node not found.");
+    });
+    it("preserves url across kind convert", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        await setNodeUrlAsync(backend, child.id, "https://example.com");
+        const note = await setNodeKindAsync(backend, child.id, "note");
+        expect(note.url).toBe("https://example.com/");
     });
 });
 

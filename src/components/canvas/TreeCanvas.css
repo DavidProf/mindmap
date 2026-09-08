@@ -224,6 +224,36 @@
     outline-offset: 1px;
 }
 
+.node-link {
+    position: absolute;
+    right: 0;
+    top: 8px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    border: 1.5px solid var(--node-stroke);
+    border-radius: var(--radius-full);
+    color: var(--muted);
+    line-height: 1;
+    box-shadow: var(--shadow-sm);
+    z-index: 2;
+    cursor: pointer;
+}
+
+.node-link:hover {
+    border-color: var(--plus-accent);
+    color: var(--plus-accent);
+}
+
+.node-link:focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 1px;
+}
+
 .node-editor {
     position: absolute;
     inset: 0;

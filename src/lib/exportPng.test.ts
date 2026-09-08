@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
     buildExportFilename,
     EXPORT_PADDING,
+    linkBadgeCenterPure,
     NOTE_MAX_CHARS_PER_LINE,
     NOTE_MAX_LINES,
     noteRectForExport,
     paddedExportBounds,
     resolveExportScale,
+    shouldDrawLinkBadge,
     wrapLinesPure,
     wrapNoteLinesPure,
 } from "./exportPng";
@@ -123,5 +125,30 @@ describe("note export helpers", () => {
         expect(rect.height).toBe(NOTE_HEIGHT * 2);
         expect(rect.x).toBe(100 - NOTE_WIDTH);
         expect(rect.y).toBe(50 - NOTE_HEIGHT);
+    });
+});
+
+describe("link export indicator (13b)", () => {
+    it("draws a badge only for non-empty urls", () => {
+        expect(shouldDrawLinkBadge(null)).toBe(false);
+        expect(shouldDrawLinkBadge("   ")).toBe(false);
+        expect(shouldDrawLinkBadge("https://example.com/")).toBe(true);
+    });
+    it("places circle and note badges inside the node bounds", () => {
+        const circle = linkBadgeCenterPure(100, 100, 2, "circle");
+        expect(circle.radius).toBeGreaterThan(0);
+        expect(circle.x).toBeGreaterThan(100);
+        expect(circle.y).toBeLessThan(100);
+        const note = linkBadgeCenterPure(100, 100, 2, "note");
+        const rect = noteRectForExport(100, 100, 2);
+        expect(note.x).toBeLessThan(rect.x + rect.width);
+        expect(note.x).toBeGreaterThan(rect.x);
+        expect(note.y).toBeGreaterThan(rect.y);
+        expect(note.y).toBeLessThan(rect.y + rect.height);
+    });
+    it("scales the badge with the export scale", () => {
+        const small = linkBadgeCenterPure(0, 0, 1, "circle");
+        const large = linkBadgeCenterPure(0, 0, 2, "circle");
+        expect(large.radius).toBe(small.radius * 2);
     });
 });

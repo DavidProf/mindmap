@@ -1,6 +1,7 @@
 import { NOTE_HEIGHT, NOTE_WIDTH } from "../../lib/layout";
 import type { NodeSide } from "../../types/node";
 import NodeEditor from "./NodeEditor";
+import NodeLinkBadge from "./NodeLinkBadge";
 import { PLUS_POSITIONS, useNodeGestures } from "./useNodeGestures";
 import { MAX_NOTE_TEXT_LENGTH } from "../../storage/localStore";
 import "./TreeCanvas.css";
@@ -8,6 +9,7 @@ import "./TreeCanvas.css";
 type NodeRectProps = {
     id: string;
     text: string;
+    url: string | null;
     x: number;
     y: number;
     selected: boolean;
@@ -19,6 +21,7 @@ type NodeRectProps = {
     onCancelEdit: (id: string) => void;
     onContextMenu: (id: string, x: number, y: number) => void;
     onToggleCollapsed: (id: string) => void;
+    onOpenLink: (id: string) => void;
     collapsed: boolean;
     hiddenCount: number;
 };
@@ -26,6 +29,7 @@ type NodeRectProps = {
 export default function NodeRect({
     id,
     text,
+    url,
     x,
     y,
     selected,
@@ -37,6 +41,7 @@ export default function NodeRect({
     onCancelEdit,
     onContextMenu,
     onToggleCollapsed,
+    onOpenLink,
     collapsed,
     hiddenCount,
 }: NodeRectProps) {
@@ -82,6 +87,7 @@ export default function NodeRect({
                     <span className="node-rect__text">{text}</span>
                 )}
             </div>
+            {url && <NodeLinkBadge text={text} url={url} onOpen={() => onOpenLink(id)} />}
             {collapsed && hiddenCount > 0 && (
                 <button
                     type="button"

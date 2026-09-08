@@ -19,7 +19,7 @@
 - [x] 12. **IndexedDB storage** — migrate persistence to IndexedDB primary with localStorage fallback for environments without it (notably mobile-framework WebViews) plus unavailable warning
 - [ ] 13. **Dense text & media nodes** — rectangle nodes for images/video/links and expanded text type (post-circle MVP)
   - [x] 13a. **Expanded-text rectangle nodes** — note kind with longer text, rect rendering, size-aware layout + PNG export
-  - [ ] 13b. **Link nodes** — URL attach/open on nodes (validation, affordance, export handling)
+  - [x] 13b. **Link nodes** — URL attach/open on nodes (validation, affordance, export handling)
   - [ ] 13c. **Image/video rectangle nodes** — media attach/render with persistence and export handling
 - [ ] 14. **Graph cross-links** — allow arbitrary links between nodes (breaks strict tree)
 - [ ] 15. **Undo/redo history** — in-memory stack for add/delete/edit/collapse (noted as deferred)
