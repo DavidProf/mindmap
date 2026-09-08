@@ -1,12 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Viewport } from "../../types/project";
-import {
-    clampZoom,
-    DEFAULT_VIEWPORT,
-    getViewport,
-    MIN_ZOOM,
-    setViewport,
-} from "../../lib/storage";
+import { clampZoom, MIN_ZOOM } from "../../storage/localStore";
+import { setViewportAsync } from "../../storage/operations";
+import type { StorageBackend } from "../../storage/backend";
 
 export type CanvasBounds = {
     minX: number;
@@ -19,13 +15,15 @@ export type CanvasBounds = {
 
 type UseViewportArgs = {
     projectId: string;
+    backend: StorageBackend;
+    initialViewport: Viewport;
     bounds: CanvasBounds;
     containerRef: { current: HTMLDivElement | null };
     onInteract: () => void;
 };
 
-export default function useViewport({ projectId, bounds, containerRef, onInteract }: UseViewportArgs) {
-    const [viewport, setViewportState] = useState<Viewport>(() => getViewport(projectId) ?? { ...DEFAULT_VIEWPORT });
+export default function useViewport({ projectId, backend, initialViewport, bounds, containerRef, onInteract }: UseViewportArgs) {
+    const [viewport, setViewportState] = useState<Viewport>(initialViewport);
     const [animate, setAnimate] = useState(false);
     const [dragging, setDragging] = useState(false);
     const dragRef = useRef<{ sx: number; sy: number; vx: number; vy: number } | null>(null);
@@ -34,21 +32,26 @@ export default function useViewport({ projectId, bounds, containerRef, onInterac
     );
     const wheelTimer = useRef<number | null>(null);
     const animateTimer = useRef<number | null>(null);
+    const mountedRef = useRef(true);
 
     useEffect(() => {
+        mountedRef.current = true;
         return () => {
+            mountedRef.current = false;
             if (wheelTimer.current) window.clearTimeout(wheelTimer.current);
             if (animateTimer.current) window.clearTimeout(animateTimer.current);
         };
     }, []);
 
     function commitViewport(next: Viewport) {
-        try {
-            const persisted = setViewport(projectId, next);
-            setViewportState(persisted);
-        } catch {
-            setViewportState(next);
-        }
+        void (async () => {
+            try {
+                const persisted = await setViewportAsync(backend, projectId, next);
+                if (mountedRef.current) setViewportState(persisted);
+            } catch {
+                if (mountedRef.current) setViewportState(next);
+            }
+        })();
     }
 
     function handleRecenter(e?: React.MouseEvent) {

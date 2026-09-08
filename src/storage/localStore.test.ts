@@ -1,23 +1,19 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
     __resetForTests,
     clampZoom,
+    consumeCorruptionFlag,
     countSubtreeNodesPure,
-    deleteNodeSubtree,
     getNodeCountForProjectPure,
     getSubtreeCountsPure,
     getSubtreeIdsPure,
-    getViewport,
     isNameUniquePure,
     loadNodes,
     loadProjects,
-    saveNodes,
     saveProjects,
-    setViewport,
-    updateNodeText,
     validateNodeTextPure,
     validateProjectNamePure,
-} from "./storage";
+} from "./localStore";
 import type { Project, Viewport } from "../types/project";
 import type { Node } from "../types/node";
 
@@ -34,6 +30,26 @@ function project(id: string, name: string, viewport: Viewport = { x: 0, y: 0, zo
 beforeEach(() => {
     __resetForTests();
 });
+
+afterEach(() => {
+    vi.unstubAllGlobals();
+});
+
+function stubWindow(initial: Record<string, string> = {}) {
+    const store = new Map(Object.entries(initial));
+    vi.stubGlobal("window", {
+        localStorage: {
+            getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+            setItem: (key: string, value: string) => {
+                store.set(key, value);
+            },
+            removeItem: (key: string) => {
+                store.delete(key);
+            },
+        },
+    });
+    return store;
+}
 
 describe("isNameUniquePure", () => {
     const projects = [project("a", "Alpha")];
@@ -132,54 +148,44 @@ describe("subtree helpers", () => {
     });
 });
 
-describe("deleteNodeSubtree", () => {
-    it("removes exactly the subtree and reports the ids", () => {
-        saveProjects([project("p1", "P1"), project("p2", "P2")]);
-        saveNodes([
-            node("root", "p1", null),
-            node("a", "p1", "root"),
-            node("b", "p1", "a"),
-            node("c", "p1", "root"),
-            node("other", "p2", null),
-        ]);
-        const { deletedIds } = deleteNodeSubtree("a");
-        expect(deletedIds.sort()).toEqual(["a", "b"]);
-        expect(loadNodes().map((n) => n.id).sort()).toEqual(["c", "other", "root"]);
+describe("corruption recovery", () => {
+    it("resets corrupt JSON and raises the flag once", () => {
+        __resetForTests();
+        stubWindow({ "mindmap:projects": "not-json{{{", "mindmap:nodes": "[]" });
+        expect(loadProjects()).toEqual([]);
+        expect(consumeCorruptionFlag()).toBe(true);
+        expect(consumeCorruptionFlag()).toBe(false);
     });
-    it("refuses the root and unknown nodes", () => {
-        saveProjects([project("p1", "P1")]);
-        saveNodes([node("root", "p1", null)]);
-        expect(() => deleteNodeSubtree("root")).toThrow("Cannot delete the root node.");
-        expect(() => deleteNodeSubtree("missing")).toThrow("Node not found.");
+
+    it("resets corrupt nodes without flagging valid projects", () => {
+        __resetForTests();
+        stubWindow({ "mindmap:projects": "[]", "mindmap:nodes": "broken" });
+        expect(loadNodes()).toEqual([]);
+        expect(consumeCorruptionFlag()).toBe(true);
+    });
+
+    it("treats non-array JSON as empty without corruption", () => {
+        __resetForTests();
+        stubWindow({ "mindmap:projects": '"oops"', "mindmap:nodes": "[]" });
+        expect(loadProjects()).toEqual([]);
+        expect(consumeCorruptionFlag()).toBe(false);
     });
 });
 
-describe("viewport storage", () => {
-    it("returns null for an unknown project", () => {
-        expect(getViewport("missing")).toBeNull();
-    });
-    it("clamps zoom on write", () => {
-        saveProjects([project("p1", "P1")]);
-        expect(setViewport("p1", { x: 1, y: 2, zoom: 99 })).toEqual({ x: 1, y: 2, zoom: 3 });
-        expect(getViewport("p1")).toEqual({ x: 1, y: 2, zoom: 3 });
-    });
-    it("falls back to the default for a corrupt stored viewport", () => {
-        saveProjects([{ ...project("p1", "P1"), viewport: "bad" as unknown as Viewport }]);
-        expect(getViewport("p1")).toEqual({ x: 0, y: 0, zoom: 1 });
-    });
-    it("refuses an unknown project on write", () => {
-        expect(() => setViewport("missing", { x: 0, y: 0, zoom: 1 })).toThrow("Project not found.");
-    });
-    it("preserves updatedAt on viewport-only saves", () => {
-        saveProjects([project("p1", "P1")]);
-        saveNodes([node("root", "p1", null)]);
-        setViewport("p1", { x: 10, y: 20, zoom: 2 });
-        expect(loadProjects().find((p) => p.id === "p1")!.updatedAt).toBe(STAMP);
-    });
-    it("still bumps updatedAt on content edits", () => {
-        saveProjects([project("p1", "P1")]);
-        saveNodes([node("root", "p1", null)]);
-        updateNodeText("root", "Edited");
-        expect(loadProjects().find((p) => p.id === "p1")!.updatedAt).not.toBe(STAMP);
+describe("quota handling", () => {
+    it("rethrows quota errors instead of swallowing them", () => {
+        stubWindow();
+        loadProjects();
+        const quotaError = new DOMException("full", "QuotaExceededError");
+        vi.stubGlobal("window", {
+            localStorage: {
+                getItem: () => null,
+                setItem: () => {
+                    throw quotaError;
+                },
+                removeItem: () => {},
+            },
+        });
+        expect(() => saveProjects([project("p1", "P1")])).toThrow(quotaError);
     });
 });

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from "@mui/material";
-import { MAX_PROJECT_NAME_LENGTH, validateProjectNamePure } from "../../lib/storage";
+import { MAX_PROJECT_NAME_LENGTH, validateProjectNamePure } from "../../storage/localStore";
 import type { Project } from "../../types/project";
 import { PILL_SX } from "../pillSx";
 
@@ -8,7 +8,7 @@ type Props = {
     open: boolean;
     projects: Project[];
     onClose: () => void;
-    onSubmit: (name: string) => boolean;
+    onSubmit: (name: string) => Promise<boolean>;
 };
 
 export default function CreateProjectDialog({ open, projects, onClose, onSubmit }: Props) {
@@ -25,10 +25,10 @@ export default function CreateProjectDialog({ open, projects, onClose, onSubmit 
     const showError = error !== null && draft.length > 0;
     const helperText = showError ? error : `${draft.length}/${MAX_PROJECT_NAME_LENGTH}`;
 
-    function handleSubmit() {
+    async function handleSubmit() {
         const trimmed = draft.trim();
         if (validateProjectNamePure(trimmed, projects)) return;
-        if (onSubmit(trimmed)) {
+        if (await onSubmit(trimmed)) {
             setDraft("");
             onClose();
         }

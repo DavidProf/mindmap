@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert, Button, Snackbar } from "@mui/material";
 import AppHeader from "../components/layout/AppHeader";
@@ -8,24 +8,27 @@ import HomeEmptyState from "../components/home/HomeEmptyState";
 import ProjectGrid from "../components/home/ProjectGrid";
 import ProjectMenu from "../components/home/ProjectMenu";
 import { PILL_SX } from "../components/pillSx";
+import { consumeCorruptionFlag, validateProjectNamePure } from "../storage/localStore";
+import { initStorage, type StorageFallback } from "../storage/init";
 import {
-    consumeCorruptionFlag,
-    createProject,
-    deleteProject,
-    getNodeCountForProject,
-    getProjectsSortedByUpdatedAt,
-    isStorageAvailable,
-    renameProject,
-    validateProjectNamePure,
-} from "../lib/storage";
+    createProjectAsync,
+    deleteProjectAsync,
+    getNodeCountForProjectAsync,
+    getProjectsSortedByUpdatedAtAsync,
+    isQuotaError,
+    renameProjectAsync,
+} from "../storage/operations";
+import type { StorageBackend } from "../storage/backend";
 import type { Project } from "../types/project";
 import "./HomePage.css";
 
 export default function HomePage() {
     const navigate = useNavigate();
-    const [projects, setProjects] = useState<Project[]>(() => getProjectsSortedByUpdatedAt());
-    const [storageWarning] = useState(() => !isStorageAvailable());
-    const [corruptionWarning] = useState(() => consumeCorruptionFlag());
+    const [backend, setBackend] = useState<StorageBackend | null>(null);
+    const [fallback, setFallback] = useState<StorageFallback | null>(null);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [corruptionWarning, setCorruptionWarning] = useState(false);
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
     const [menuProject, setMenuProject] = useState<Project | null>(null);
     const [createOpen, setCreateOpen] = useState(false);
@@ -34,16 +37,41 @@ export default function HomePage() {
     const [deleteNodeCount, setDeleteNodeCount] = useState(0);
     const [quotaError, setQuotaError] = useState<string | null>(null);
 
-    function handleCreate(name: string): boolean {
+    useEffect(() => {
+        let cancelled = false;
+        initStorage()
+            .then((res) => {
+                if (cancelled) return;
+                setBackend(res.backend);
+                setFallback(res.fallback);
+                setCorruptionWarning(consumeCorruptionFlag());
+                return getProjectsSortedByUpdatedAtAsync(res.backend).then((sorted) => {
+                    if (!cancelled) setProjects(sorted);
+                });
+            })
+            .catch(() => undefined)
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    async function refresh(b: StorageBackend) {
+        setProjects(await getProjectsSortedByUpdatedAtAsync(b));
+    }
+
+    async function handleCreate(name: string): Promise<boolean> {
+        if (!backend) return false;
         const err = validateProjectNamePure(name, projects);
         if (err) return false;
         try {
-            createProject(name);
-            setProjects(getProjectsSortedByUpdatedAt());
+            await createProjectAsync(backend, name);
+            await refresh(backend);
             return true;
         } catch (e) {
-            const errObj = e as DOMException;
-            if (errObj.name === "QuotaExceededError" || errObj.name === "NS_ERROR_DOM_QUOTA_REACHED") {
+            if (isQuotaError(e)) {
                 setQuotaError("Storage full — delete a project or clear data.");
             } else if (e instanceof Error) {
                 setQuotaError(e.message);
@@ -62,12 +90,13 @@ export default function HomePage() {
         setRenamingId(p.id);
     }
 
-    function handleRenameCommit(id: string, name: string): boolean {
+    async function handleRenameCommit(id: string, name: string): Promise<boolean> {
+        if (!backend) return false;
         const err = validateProjectNamePure(name, projects, id);
         if (err) return false;
         try {
-            renameProject(id, name);
-            setProjects(getProjectsSortedByUpdatedAt());
+            await renameProjectAsync(backend, id, name);
+            await refresh(backend);
             setRenamingId(null);
             return true;
         } catch (e) {
@@ -77,11 +106,11 @@ export default function HomePage() {
         }
     }
 
-    function handleDelete() {
-        if (!deleteTarget) return;
+    async function handleDelete() {
+        if (!deleteTarget || !backend) return;
         try {
-            deleteProject(deleteTarget.id);
-            setProjects(getProjectsSortedByUpdatedAt());
+            await deleteProjectAsync(backend, deleteTarget.id);
+            await refresh(backend);
             setDeleteTarget(null);
         } catch (e) {
             if (e instanceof Error) setQuotaError(e.message);
@@ -100,8 +129,9 @@ export default function HomePage() {
         setMenuProject(null);
     }
 
-    function openDelete(p: Project) {
-        setDeleteNodeCount(getNodeCountForProject(p.id));
+    async function openDelete(p: Project) {
+        if (!backend) return;
+        setDeleteNodeCount(await getNodeCountForProjectAsync(backend, p.id));
         setDeleteTarget(p);
     }
 
@@ -127,7 +157,13 @@ export default function HomePage() {
                     )}
                 </div>
 
-                {storageWarning && (
+                {fallback === "localstorage" && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                        Using local fallback storage — changes are saved in this browser only.
+                    </Alert>
+                )}
+
+                {fallback === "memory" && (
                     <Alert severity="warning" sx={{ mb: 2 }}>
                         Storage unavailable — changes won&apos;t persist after reload.
                     </Alert>
@@ -139,7 +175,9 @@ export default function HomePage() {
                     </Alert>
                 )}
 
-                {isEmpty ? (
+                {loading ? (
+                    <p>Loading projects…</p>
+                ) : isEmpty ? (
                     <HomeEmptyState onCreate={openCreate} />
                 ) : (
                     <ProjectGrid

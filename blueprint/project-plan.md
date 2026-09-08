@@ -132,11 +132,11 @@
 
 ## 10. Risks, Assumptions & TODOs
 
-**Risks:** Local-only data loss if browser cleared; touch long-press vs drag conflict; PNG export of large trees off-screen; auto-layout readability at 50+ nodes on small screens; SPA routing on GitHub Pages 404.
+**Risks:** Local-only data loss if browser cleared; touch long-press vs drag conflict; PNG export of large trees off-screen; auto-layout readability at 50+ nodes on small screens; SPA routing on GitHub Pages 404; future cloud sync must be delta-based (whole-list transfer measured at ~1 MB per op at 5k nodes).
 
 **Assumptions:** Users accept tree-only for MVP; short text sufficient; MUI can be themed to Excalidraw-minimal without custom CSS burden; custom layout cheaper than React Flow.
 
-**Open TODOs:** Palette tokens, IndexedDB migration path to cloud later.
+**Open TODOs:** Palette tokens, IndexedDB migration path to cloud later (delta sync on per-record updatedAt + tombstones).
 
 ## 11. Success Criteria
 

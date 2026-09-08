@@ -21,7 +21,7 @@ type Props = {
     renaming: boolean;
     onOpen: (id: string) => void;
     onMenu: (e: React.MouseEvent<HTMLElement>, project: Project) => void;
-    onRenameCommit: (id: string, name: string) => boolean;
+    onRenameCommit: (id: string, name: string) => Promise<boolean>;
     onRenameCancel: () => void;
 };
 

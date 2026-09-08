@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MAX_NODE_TEXT_LENGTH } from "../../lib/storage";
+import { MAX_NODE_TEXT_LENGTH } from "../../storage/localStore";
 import "./TreeCanvas.css";
 
 type NodeEditorProps = {

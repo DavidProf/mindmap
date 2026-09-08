@@ -1,6 +1,6 @@
 # Mindmap - Project Overview
 
-<!-- blueprint:source-hash e8358c0f588aae68929d4bfb2e4aba93e6ea7f44c41b8318a9a81ce2589767a2 -->
+<!-- blueprint:source-hash 5813f812c1f7a4168d537d66988013f1334410c78cb136093313da9c29c69109 -->
 
 > Calm, mobile-first mind-map app where a centered root grows into a strict auto-laid-out tree that can be collapsed and exported as PNG - local-only, no login, Excalidraw-minimal on GitHub Pages.
 
@@ -46,7 +46,7 @@ In `build-plan.md` order (MVP 1-7 plus item 8 shipped):
 19. **Grid-like layout** - alternative placement model toward stable, direction-faithful positioning.
 20. **PNG preview fit-to-view** - scale whole-tree preview to fit the dialog without scrolling.
 21. **Share via URL** - encode a project into a shareable URL (query/hash) that opens or imports a copy, with length-limit and malformed-link handling.
-22. **Team sharing via short link** - cloud-backed short link for teammates to open and edit the same project; local-only remains the default.
+22. **Team sharing via short link** - cloud-backed short link for teammates to open and edit the same project; local-only remains the default. Sync must be delta-based (per-record `updatedAt` cursors plus delete tombstones), not whole-list transfer; tombstones not yet implemented.
 
 ## Data model
 
@@ -124,4 +124,4 @@ Responsive and touch: hover logic disabled on touch, long-press tuned not to con
 
 - **Zoom % indicator (resolved by shipping):** build-plan item 7 added it though `project-plan.md` never mentions it. It shipped as a tiny read-only badge; no plan edit needed unless the direction changes.
 - **Stale plan text:** `project-plan.md` still describes the 30-char limit as a post-MVP idea and says "no browser tests harness yet," but item 8 is now done and `npm run test:browser` exists. Plans remain the source of truth; consider a small plan touch-up on the next plan edit, then re-run `/overview`.
-- **TODOs still in plans:** palette/typography tokens, collapse-indicator design, empty-state illustration (all feed build-plan item 9); cloud-migration path (feeds item 12).
+- **TODOs still in plans:** palette/typography tokens, collapse-indicator design, empty-state illustration (all feed build-plan item 9); cloud-migration path (feeds item 12); item 22 sync must be delta-based (whole-list transfer measured near 1 MB per op at 5k nodes; tombstones pending).

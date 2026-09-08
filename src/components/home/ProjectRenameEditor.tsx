@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { MAX_PROJECT_NAME_LENGTH, validateProjectNamePure } from "../../lib/storage";
+import { MAX_PROJECT_NAME_LENGTH, validateProjectNamePure } from "../../storage/localStore";
 import type { Project } from "../../types/project";
 
 type Props = {
     project: Project;
     projects: Project[];
-    onCommit: (name: string) => boolean;
+    onCommit: (name: string) => Promise<boolean>;
     onCancel: () => void;
 };
 
@@ -25,11 +25,11 @@ export default function ProjectRenameEditor({ project, projects, onCommit, onCan
     const error = validateProjectNamePure(draft, projects, project.id);
     const unchanged = draft.trim() === project.name;
 
-    function commit() {
+    async function commit() {
         // Enter and blur fire together; only the first one counts.
         if (doneRef.current) return;
         doneRef.current = true;
-        if ((!unchanged && error === null && onCommit(draft.trim())) || unchanged) {
+        if ((!unchanged && error === null && (await onCommit(draft.trim()))) || unchanged) {
             onCancel();
         } else {
             doneRef.current = false;

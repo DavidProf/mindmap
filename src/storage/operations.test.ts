@@ -1,0 +1,235 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+    addChildNodeAsync,
+    createProjectAsync,
+    deleteNodeSubtreeAsync,
+    deleteProjectAsync,
+    getNodeCountForProjectAsync,
+    getProjectsSortedByUpdatedAtAsync,
+    getViewportAsync,
+    isQuotaError,
+    renameProjectAsync,
+    setNodeCollapsedAsync,
+    setViewportAsync,
+    updateNodeTextAsync,
+} from "./operations";
+import { createLocalStorageBackend, createMemoryBackend } from "./backend";
+import { __resetForTests, loadNodes, loadProjects } from "./localStore";
+import type { Project, Viewport } from "../types/project";
+
+const STAMP = "2026-01-01T00:00:00.000Z";
+
+function stubWindow(initial: Record<string, string> = {}) {
+    const store = new Map(Object.entries(initial));
+    vi.stubGlobal("window", {
+        localStorage: {
+            getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+            setItem: (key: string, value: string) => {
+                store.set(key, value);
+            },
+            removeItem: (key: string) => {
+                store.delete(key);
+            },
+        },
+    });
+    return store;
+}
+
+function project(id: string): Project {
+    return { id, name: id, rootNodeId: `${id}-root`, createdAt: STAMP, updatedAt: STAMP, viewport: { x: 0, y: 0, zoom: 1 } };
+}
+
+beforeEach(() => {
+    __resetForTests();
+});
+
+afterEach(() => {
+    vi.unstubAllGlobals();
+});
+
+describe("storageAsync project parity", () => {
+    it("creates a project with a root node", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        expect(project.name).toBe("Alpha");
+        expect(await getProjectsSortedByUpdatedAtAsync(backend)).toHaveLength(1);
+        expect(await getNodeCountForProjectAsync(backend, project.id)).toBe(1);
+        const root = (await backend.loadNodes()).find((n) => n.id === project.rootNodeId)!;
+        expect(root.text).toBe("Alpha");
+        expect(root.parentId).toBeNull();
+    });
+    it("rejects duplicate names", async () => {
+        const backend = createMemoryBackend();
+        await createProjectAsync(backend, "Alpha");
+        await expect(createProjectAsync(backend, "alpha")).rejects.toThrow("A project with this name already exists.");
+    });
+    it("renames and syncs untouched root text", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const renamed = await renameProjectAsync(backend, project.id, "Beta");
+        expect(renamed.name).toBe("Beta");
+        const nodes = await backend.loadNodes();
+        expect(nodes.find((n) => n.id === project.rootNodeId)?.text).toBe("Beta");
+    });
+    it("keeps edited root text on rename", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const nodes = await backend.loadNodes();
+        const root = nodes.find((n) => n.id === project.rootNodeId)!;
+        await backend.saveNodes(nodes.map((n) => (n.id === root.id ? { ...n, text: "Custom" } : n)));
+        await renameProjectAsync(backend, project.id, "Beta");
+        const after = await backend.loadNodes();
+        expect(after.find((n) => n.id === project.rootNodeId)?.text).toBe("Custom");
+    });
+    it("sorts newest first with createdAt tie-break", async () => {
+        const backend = createMemoryBackend();
+        const older = { ...project("a"), updatedAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z" };
+        const newer = { ...project("b"), updatedAt: "2026-01-02T00:00:00.000Z", createdAt: "2026-01-02T00:00:00.000Z" };
+        const tied = { ...project("c"), updatedAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-03T00:00:00.000Z" };
+        await backend.saveProjects([older, newer, tied]);
+        const sorted = await getProjectsSortedByUpdatedAtAsync(backend);
+        expect(sorted.map((p) => p.id)).toEqual(["b", "c", "a"]);
+    });
+    it("deletes with cascade", async () => {
+        const backend = createMemoryBackend();
+        const first = await createProjectAsync(backend, "First");
+        const second = await createProjectAsync(backend, "Second");
+        await deleteProjectAsync(backend, second.id);
+        expect(await getProjectsSortedByUpdatedAtAsync(backend)).toHaveLength(1);
+        expect(await getNodeCountForProjectAsync(backend, second.id)).toBe(0);
+        expect(await getNodeCountForProjectAsync(backend, first.id)).toBe(1);
+    });
+    it("throws for unknown project on rename", async () => {
+        const backend = createMemoryBackend();
+        await expect(renameProjectAsync(backend, "missing", "Beta")).rejects.toThrow("Project not found.");
+    });
+});
+
+describe("storageAsync node parity", () => {
+    it("adds a child with linkage, side, and project bump", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const before = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, " Kid ", "north");
+        expect(child.parentId).toBe(project.rootNodeId);
+        expect(child.text).toBe("Kid");
+        expect(child.side).toBe("north");
+        const after = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
+        expect(Date.parse(after) >= Date.parse(before)).toBe(true);
+    });
+    it("rejects bad child input", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        await expect(addChildNodeAsync(backend, project.id, project.rootNodeId, "  ", "south")).rejects.toThrow(
+            "Text is required.",
+        );
+        await expect(addChildNodeAsync(backend, project.id, project.rootNodeId, "x".repeat(31), "south")).rejects.toThrow(
+            "Text must be 30 characters or less.",
+        );
+        await expect(
+            addChildNodeAsync(backend, project.id, project.rootNodeId, "ok", "sideways" as never),
+        ).rejects.toThrow("Invalid side.");
+        await expect(addChildNodeAsync(backend, project.id, "missing", "ok", "south")).rejects.toThrow(
+            "Parent node not found.",
+        );
+        await expect(addChildNodeAsync(backend, "missing", project.rootNodeId, "ok", "south")).rejects.toThrow(
+            "Project not found.",
+        );
+    });
+    it("updates text with trim and strictly-increasing bumps", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const updated = await updateNodeTextAsync(backend, child.id, "  Renamed  ");
+        expect(updated.text).toBe("Renamed");
+        expect(Date.parse(updated.updatedAt)).toBeGreaterThan(Date.parse(child.updatedAt));
+        const first = await updateNodeTextAsync(backend, child.id, "One");
+        const second = await updateNodeTextAsync(backend, child.id, "Two");
+        expect(Date.parse(second.updatedAt)).toBeGreaterThan(Date.parse(first.updatedAt));
+        await expect(updateNodeTextAsync(backend, child.id, "   ")).rejects.toThrow("Text is required.");
+        await expect(updateNodeTextAsync(backend, "missing", "ok")).rejects.toThrow("Node not found.");
+    });
+    it("toggles collapse and deletes subtrees atomically", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const grandchild = await addChildNodeAsync(backend, project.id, child.id, "Grandkid", "south");
+        const collapsed = await setNodeCollapsedAsync(backend, child.id, true);
+        expect(collapsed.collapsed).toBe(true);
+        const same = await setNodeCollapsedAsync(backend, child.id, true);
+        expect(same.updatedAt).toBe(collapsed.updatedAt);
+        const res = await deleteNodeSubtreeAsync(backend, child.id);
+        expect(res.deletedIds).toContain(child.id);
+        expect(res.deletedIds).toContain(grandchild.id);
+        expect(await getNodeCountForProjectAsync(backend, project.id)).toBe(1);
+        const sibling = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Sibling", "south");
+        const projBefore = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
+        await deleteNodeSubtreeAsync(backend, sibling.id);
+        const projAfter = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
+        expect(Date.parse(projAfter)).toBeGreaterThan(Date.parse(projBefore));
+        await expect(deleteNodeSubtreeAsync(backend, project.rootNodeId)).rejects.toThrow("Cannot delete the root node.");
+        await expect(deleteNodeSubtreeAsync(backend, "missing")).rejects.toThrow("Node not found.");
+        await expect(setNodeCollapsedAsync(backend, "missing", true)).rejects.toThrow("Node not found.");
+    });
+    it("viewport round-trips with clamping and no updatedAt bump", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const before = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
+        const saved = await setViewportAsync(backend, project.id, { x: 10, y: 20, zoom: 99 });
+        expect(saved.zoom).toBe(3);
+        expect(await getViewportAsync(backend, project.id)).toEqual(saved);
+        const after = (await backend.loadProjects()).find((p) => p.id === project.id)!;
+        expect(after.updatedAt).toBe(before);
+        expect(loadProjects().find((p) => p.id === project.id)?.viewport).toEqual(saved);
+        expect(await getViewportAsync(backend, "missing")).toBeNull();
+        await expect(setViewportAsync(backend, "missing", { x: 0, y: 0, zoom: 1 })).rejects.toThrow(
+            "Project not found.",
+        );
+    });
+    it("falls back to the default for a corrupt stored viewport", async () => {
+        const backend = createMemoryBackend();
+        await backend.saveProjects([{ ...project("a"), viewport: "bad" as unknown as Viewport }]);
+        expect(await getViewportAsync(backend, "a")).toEqual({ x: 0, y: 0, zoom: 1 });
+    });
+});
+
+describe("localStorage mirror", () => {
+    it("keeps the fallback seed fresh on create and delete", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        expect(loadProjects().map((p) => p.id)).toContain(project.id);
+        expect(loadNodes().some((n) => n.projectId === project.id)).toBe(true);
+        await deleteProjectAsync(backend, project.id);
+        expect(loadProjects()).toHaveLength(0);
+        expect(loadNodes()).toHaveLength(0);
+    });
+});
+
+describe("isQuotaError", () => {
+    it("detects quota names", () => {
+        expect(isQuotaError(Object.assign(new Error("x"), { name: "QuotaExceededError" }))).toBe(true);
+        expect(isQuotaError(Object.assign(new Error("x"), { name: "NS_ERROR_DOM_QUOTA_REACHED" }))).toBe(true);
+        expect(isQuotaError(new Error("other"))).toBe(false);
+    });
+});
+
+describe("quota handling", () => {
+    it("rethrows quota errors through the localStorage backend instead of swallowing them", async () => {
+        stubWindow();
+        const backend = createLocalStorageBackend();
+        await backend.loadProjects();
+        const quotaError = new DOMException("full", "QuotaExceededError");
+        vi.stubGlobal("window", {
+            localStorage: {
+                getItem: () => null,
+                setItem: () => {
+                    throw quotaError;
+                },
+                removeItem: () => {},
+            },
+        });
+        await expect(createProjectAsync(backend, "Alpha")).rejects.toThrow(quotaError);
+        vi.unstubAllGlobals();
+        __resetForTests();
+    });
+});

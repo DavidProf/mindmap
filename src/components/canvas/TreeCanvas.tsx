@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { Node, NodeSide } from "../../types/node";
+import type { Viewport } from "../../types/project";
 import type { Position } from "../../lib/layout";
-import { countSubtreeNodesPure, getSubtreeCountsPure } from "../../lib/storage";
+import { countSubtreeNodesPure, getSubtreeCountsPure } from "../../storage/localStore";
 import { formatZoomPct } from "../../lib/zoom";
 import useViewport from "./useViewport";
 import type { CanvasBounds } from "./useViewport";
+import type { StorageBackend } from "../../storage/backend";
 import NodeCircle from "./NodeCircle";
 import NodeContextMenu from "./NodeContextMenu";
 import type { NodeMenuState } from "./NodeContextMenu";
@@ -14,19 +16,21 @@ import "./TreeCanvas.css";
 
 type TreeCanvasProps = {
     projectId: string;
+    backend: StorageBackend;
+    initialViewport: Viewport;
     rootNodeId: string;
     nodes: Node[];
     positions: Map<string, Position>;
     edges: { from: string; to: string }[];
     bounds: CanvasBounds;
     recenterSignal?: number;
-    onAddChild?: (parentId: string, text: string, side: NodeSide) => Node | null;
-    onUpdateText?: (nodeId: string, text: string) => Node | null;
-    onToggleCollapsed?: (nodeId: string) => Node | null;
-    onDeleteSubtree?: (nodeId: string) => { deletedIds: string[] } | null;
+    onAddChild?: (parentId: string, text: string, side: NodeSide) => Promise<Node | null>;
+    onUpdateText?: (nodeId: string, text: string) => Promise<Node | null>;
+    onToggleCollapsed?: (nodeId: string) => Promise<Node | null>;
+    onDeleteSubtree?: (nodeId: string) => Promise<{ deletedIds: string[] } | null>;
 };
 
-export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
+export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -51,7 +55,7 @@ export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, ed
         handleTouchStart,
         handleTouchMove,
         handleTouchEnd,
-    } = useViewport({ projectId, bounds, containerRef, onInteract: () => closeMenu() });
+    } = useViewport({ projectId, backend, initialViewport, bounds, containerRef, onInteract: () => closeMenu() });
 
     function clearSelection() {
         // Canvas mousedown is preventDefaulted for panning, so a pending
@@ -80,9 +84,9 @@ export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, ed
         focusCircle(id);
     }
 
-    function handlePlus(parentId: string, side: NodeSide) {
+    async function handlePlus(parentId: string, side: NodeSide) {
         if (!onAddChild) return;
-        const child = onAddChild(parentId, "New idea", side);
+        const child = await onAddChild(parentId, "New idea", side);
         if (child) {
             setSelectedId(child.id);
             setEditingId(child.id);
@@ -107,10 +111,10 @@ export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, ed
         if (target) handleEditStart(target);
     }
 
-    function handleMenuToggleCollapse() {
+    async function handleMenuToggleCollapse() {
         const target = menu?.nodeId;
         closeMenu(target);
-        if (target) onToggleCollapsed?.(target);
+        if (target) await onToggleCollapsed?.(target);
     }
 
     function handleMenuDelete() {
@@ -130,11 +134,11 @@ export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, ed
         if (target) focusCircle(target.nodeId);
     }
 
-    function handleConfirmDelete() {
+    async function handleConfirmDelete() {
         const target = deleteTarget;
         if (!target) return;
         const parentId = nodes.find((n) => n.id === target.nodeId)?.parentId ?? null;
-        const res = onDeleteSubtree?.(target.nodeId);
+        const res = await onDeleteSubtree?.(target.nodeId);
         setDeleteTarget(null);
         if (res) {
             // The selection and editor must not point into a removed subtree.
@@ -160,7 +164,7 @@ export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, ed
         }
     }
 
-    function handleCommitText(nodeId: string, text: string) {
+    async function handleCommitText(nodeId: string, text: string) {
         const node = nodes.find((n) => n.id === nodeId);
         const trimmed = text.trim();
         // Empty or unchanged text reverts: the prior text stays, no write.
@@ -169,7 +173,7 @@ export default function TreeCanvas({ projectId, rootNodeId, nodes, positions, ed
             focusCircle(nodeId);
             return;
         }
-        const updated = onUpdateText?.(nodeId, text) ?? null;
+        const updated = (await onUpdateText?.(nodeId, text)) ?? null;
         // On storage failure the banner shows the error and the editor stays open.
         if (updated) {
             setEditingId(null);
