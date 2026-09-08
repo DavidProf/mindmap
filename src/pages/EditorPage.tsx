@@ -11,13 +11,14 @@ import {
     getViewportAsync,
     isQuotaError,
     setNodeCollapsedAsync,
+    setNodeKindAsync,
     updateNodeTextAsync,
 } from "../storage/operations";
 import type { StorageBackend } from "../storage/backend";
 import { computeLayout } from "../lib/layout";
 import { exportMapAsPng, paddedExportBounds, renderMapToCanvas, resolveExportScale } from "../lib/exportPng";
 import type { Project, Viewport } from "../types/project";
-import type { Node, NodeSide } from "../types/node";
+import type { Node, NodeKind, NodeSide } from "../types/node";
 import "./EditorPage.css";
 
 export default function EditorPage() {
@@ -150,6 +151,18 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not update node."));
+            return null;
+        }
+    }
+
+    async function handleSetKind(nodeId: string, kind: NodeKind, opts?: { allowTruncate?: boolean }): Promise<Node | null> {
+        try {
+            const updated = await setNodeKindAsync(backend, nodeId, kind, opts);
+            await refreshNodes();
+            setError(null);
+            return updated;
+        } catch (e) {
+            setError(toEditorError(e, "Could not convert node."));
             return null;
         }
     }
@@ -312,6 +325,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
                     recenterSignal={recenterSignal}
                     onAddChild={handleAddChild}
                     onUpdateText={handleUpdateText}
+                    onSetKind={handleSetKind}
                     onToggleCollapsed={handleToggleCollapsed}
                     onDeleteSubtree={handleDeleteSubtree}
                 />

@@ -1,10 +1,11 @@
-import { NODE_DIAMETER } from "../../lib/layout";
+import { NOTE_HEIGHT, NOTE_WIDTH } from "../../lib/layout";
 import type { NodeSide } from "../../types/node";
 import NodeEditor from "./NodeEditor";
 import { PLUS_POSITIONS, useNodeGestures } from "./useNodeGestures";
+import { MAX_NOTE_TEXT_LENGTH } from "../../storage/localStore";
 import "./TreeCanvas.css";
 
-type NodeCircleProps = {
+type NodeRectProps = {
     id: string;
     text: string;
     x: number;
@@ -22,7 +23,7 @@ type NodeCircleProps = {
     hiddenCount: number;
 };
 
-export default function NodeCircle({
+export default function NodeRect({
     id,
     text,
     x,
@@ -38,9 +39,8 @@ export default function NodeCircle({
     onToggleCollapsed,
     collapsed,
     hiddenCount,
-}: NodeCircleProps) {
-    const radius = NODE_DIAMETER / 2;
-    const needsTooltip = text.length > 40;
+}: NodeRectProps) {
+    const needsTooltip = text.length > 60;
     const g = useNodeGestures({ id, selected, onSelect, onEditStart, onContextMenu });
 
     return (
@@ -49,14 +49,14 @@ export default function NodeCircle({
             data-node-id={id}
             data-editing={editing ? "true" : undefined}
             style={{
-                left: x - radius,
-                top: y - radius,
-                width: NODE_DIAMETER,
-                height: NODE_DIAMETER,
+                left: x - NOTE_WIDTH / 2,
+                top: y - NOTE_HEIGHT / 2,
+                width: NOTE_WIDTH,
+                height: NOTE_HEIGHT,
             }}
         >
             <div
-                className="node-circle"
+                className="node-rect"
                 title={needsTooltip ? text : undefined}
                 aria-label={text}
                 tabIndex={0}
@@ -73,11 +73,13 @@ export default function NodeCircle({
                     <NodeEditor
                         nodeId={id}
                         initialText={text}
+                        maxLength={MAX_NOTE_TEXT_LENGTH}
+                        multiline
                         onCommit={(value) => onCommitText(id, value)}
                         onCancel={() => onCancelEdit(id)}
                     />
                 ) : (
-                    <span className="node-circle__text">{text}</span>
+                    <span className="node-rect__text">{text}</span>
                 )}
             </div>
             {collapsed && hiddenCount > 0 && (

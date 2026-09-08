@@ -1,4 +1,5 @@
 import type { Node } from "../types/node";
+import { normalizeNodes } from "../types/node";
 import type { Project } from "../types/project";
 import type { StorageBackend } from "./backend";
 
@@ -83,7 +84,7 @@ export function createIndexedDbBackend(open: () => Promise<IDBDatabase> = openMi
     return {
         kind: "indexeddb",
         loadProjects: async () => getAll<Project>(await getDb(), IDB_PROJECTS_STORE),
-        loadNodes: async () => getAll<Node>(await getDb(), IDB_NODES_STORE),
+        loadNodes: async () => normalizeNodes(await getAll<Node>(await getDb(), IDB_NODES_STORE)),
         saveProjects: async (projects) => {
             await putAll(await getDb(), IDB_PROJECTS_STORE, projects);
         },

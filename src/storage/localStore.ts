@@ -4,7 +4,8 @@
 // Keys: mindmap:projects + mindmap:nodes (documented choice per spec).
 
 import type { Project, Viewport } from "../types/project";
-import type { Node } from "../types/node";
+import type { Node, NodeKind } from "../types/node";
+import { isNodeKind, normalizeNodes } from "../types/node";
 
 const PROJECTS_KEY = "mindmap:projects";
 const NODES_KEY = "mindmap:nodes";
@@ -120,11 +121,11 @@ export function loadProjects(): Project[] {
 }
 
 export function loadNodes(): Node[] {
-    if (!checkStorageAvailable() && memoryNodes !== null) return [...memoryNodes];
+    if (!checkStorageAvailable() && memoryNodes !== null) return normalizeNodes([...memoryNodes]);
     const raw = safeGetItem(NODES_KEY);
-    if (!checkStorageAvailable() && memoryNodes !== null) return [...memoryNodes];
+    if (!checkStorageAvailable() && memoryNodes !== null) return normalizeNodes([...memoryNodes]);
     const parsed = parseOrFallback<Node>(raw, NODES_KEY);
-    return parsed;
+    return normalizeNodes(parsed);
 }
 
 export function saveProjects(projects: Project[]): void {
@@ -155,11 +156,17 @@ export function getNodeCountForProjectPure(nodes: Node[], projectId: string): nu
 }
 
 export const MAX_NODE_TEXT_LENGTH = 30;
+export const MAX_NOTE_TEXT_LENGTH = 280;
 
-export function validateNodeTextPure(raw: string): string | null {
+export function maxTextLengthForKind(kind: unknown): number {
+    return isNodeKind(kind) && kind === "note" ? MAX_NOTE_TEXT_LENGTH : MAX_NODE_TEXT_LENGTH;
+}
+
+export function validateNodeTextPure(raw: string, kind: NodeKind = "circle"): string | null {
     const trimmed = raw.trim();
     if (trimmed.length === 0) return "Text is required.";
-    if (trimmed.length > MAX_NODE_TEXT_LENGTH) return `Text must be ${MAX_NODE_TEXT_LENGTH} characters or less.`;
+    const max = maxTextLengthForKind(kind);
+    if (trimmed.length > max) return `Text must be ${max} characters or less.`;
     return null;
 }
 

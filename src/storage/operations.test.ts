@@ -10,6 +10,7 @@ import {
     isQuotaError,
     renameProjectAsync,
     setNodeCollapsedAsync,
+    setNodeKindAsync,
     setViewportAsync,
     updateNodeTextAsync,
 } from "./operations";
@@ -202,6 +203,62 @@ describe("localStorage mirror", () => {
         await deleteProjectAsync(backend, project.id);
         expect(loadProjects()).toHaveLength(0);
         expect(loadNodes()).toHaveLength(0);
+    });
+});
+
+describe("node kind (13a)", () => {
+    it("creates root and children as circles by default", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const root = (await backend.loadNodes()).find((n) => n.id === project.rootNodeId)!;
+        expect(root.kind).toBe("circle");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        expect(child.kind).toBe("circle");
+    });
+    it("creates and edits long note text", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "x".repeat(200), "south", "note");
+        expect(child.kind).toBe("note");
+        const updated = await updateNodeTextAsync(backend, child.id, "y".repeat(280));
+        expect(updated.text).toBe("y".repeat(280));
+        await expect(updateNodeTextAsync(backend, child.id, "y".repeat(281))).rejects.toThrow(
+            "Text must be 280 characters or less.",
+        );
+    });
+    it("rejects invalid kind on add", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        await expect(
+            addChildNodeAsync(backend, project.id, project.rootNodeId, "ok", "south", "photo" as never),
+        ).rejects.toThrow("Invalid kind.");
+    });
+    it("converts circle to note and back with truncation guard", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const note = await setNodeKindAsync(backend, child.id, "note");
+        expect(note.kind).toBe("note");
+        const long = await updateNodeTextAsync(backend, child.id, "z".repeat(100));
+        expect(long.text).toHaveLength(100);
+        await expect(setNodeKindAsync(backend, child.id, "circle")).rejects.toThrow("confirm truncation");
+        const truncated = await setNodeKindAsync(backend, child.id, "circle", { allowTruncate: true });
+        expect(truncated.kind).toBe("circle");
+        expect(truncated.text).toHaveLength(30);
+    });
+    it("normalizes legacy seed without kind on load", async () => {
+        const legacy = {
+            id: "r1",
+            projectId: "p1",
+            parentId: null,
+            text: "hi",
+            side: null,
+            collapsed: false,
+            createdAt: STAMP,
+            updatedAt: STAMP,
+        };
+        const backend = createMemoryBackend({ nodes: [legacy as never] });
+        expect((await backend.loadNodes())[0].kind).toBe("circle");
     });
 });
 

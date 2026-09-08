@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { computeLayout, GAP_X, GAP_Y, NODE_DIAMETER } from "./layout";
-import type { Node, NodeSide } from "../types/node";
+import { computeLayout, GAP_X, GAP_Y, NODE_DIAMETER, NOTE_HEIGHT, NOTE_WIDTH, nodeRadius } from "./layout";
+import type { Node, NodeKind, NodeSide } from "../types/node";
 
 const STAMP = "2026-01-01T00:00:00.000Z";
 
-function node(id: string, parentId: string | null, side: NodeSide | null = "south"): Node {
-    return { id, projectId: "p", parentId, text: id, side, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+function node(id: string, parentId: string | null, side: NodeSide | null = "south", kind: NodeKind = "circle"): Node {
+    return { id, projectId: "p", parentId, text: id, kind, side, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 function dist(a: { x: number; y: number }, b: { x: number; y: number }): number {
@@ -188,8 +188,7 @@ describe("computeLayout", () => {
         }
     });
 
-    it("keeps a deep grandchild nearer its parent than its grandparent when an unrelated branch is added", () => {
-        const tree = (withF: boolean) => {
+    it("keeps a deep grandchild nearer its parent than its grandparent when an unrelated branch is added", () => {        const tree = (withF: boolean) => {
             const nodes = [
                 node("R", null),
                 node("A", "R", "west"),
@@ -208,5 +207,40 @@ describe("computeLayout", () => {
             const b = result.positions.get("B")!;
             expect(dist(e, c)).toBeLessThan(dist(e, b));
         }
+    });
+
+    it("sizes note radii from the rectangle diagonal", () => {
+        expect(nodeRadius("circle")).toBe(NODE_DIAMETER / 2);
+        expect(nodeRadius("note")).toBeCloseTo(Math.hypot(NOTE_WIDTH, NOTE_HEIGHT) / 2, 10);
+        expect(nodeRadius("note")).toBeGreaterThan(nodeRadius("circle"));
+    });
+
+    it("separates mixed circle and note nodes by summed radii", () => {
+        const sides: NodeSide[] = ["east", "south", "west", "north"];
+        const kinds: NodeKind[] = ["circle", "note"];
+        const nodes: Node[] = [node("root", null)];
+        for (let i = 0; i < 12; i++) {
+            const parent = i < 4 ? "root" : `n${i - 4}`;
+            nodes.push(node(`n${i}`, parent, sides[i % sides.length], kinds[i % kinds.length]));
+        }
+        const byId = new Map(nodes.map((n) => [n.id, n]));
+        const result = computeLayout(nodes, "root");
+        const ids = [...result.positions.keys()];
+        expect(ids.length).toBeGreaterThan(8);
+        for (let i = 0; i < ids.length; i++) {
+            for (let j = i + 1; j < ids.length; j++) {
+                const a = result.positions.get(ids[i])!;
+                const b = result.positions.get(ids[j])!;
+                const need = nodeRadius(byId.get(ids[i])!.kind) + nodeRadius(byId.get(ids[j])!.kind);
+                expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(need - 1e-6);
+            }
+        }
+    });
+
+    it("pads bounds by note half-extents", () => {
+        const nodes = [node("root", null), node("child", "root", "east", "note")];
+        const { bounds } = computeLayout(nodes, "root");
+        expect(bounds.width).toBeGreaterThanOrEqual(NOTE_WIDTH);
+        expect(bounds.height).toBeGreaterThanOrEqual(NOTE_HEIGHT);
     });
 });

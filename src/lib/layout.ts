@@ -1,14 +1,33 @@
 // Radial tidy-tree layout - stateless, pure, no DOM.
 // Root centers at (0,0); branches grow toward N/E/S/W by Node.side.
 // Same-side siblings fan out across their side quadrant, weighted by
-// visible leaf count. Constants tuned for fixed 88px circles.
+// visible leaf count. Circles use NODE_DIAMETER; notes use NOTE_WIDTH
+// x NOTE_HEIGHT with bounding-circle clearance so mixed maps separate.
 
-import type { Node, NodeSide } from "../types/node";
+import type { Node, NodeKind, NodeSide } from "../types/node";
 import { isNodeSide } from "../types/node";
 
 export const NODE_DIAMETER = 88;
+export const NOTE_WIDTH = 168;
+export const NOTE_HEIGHT = 104;
 export const GAP_X = 32;
 export const GAP_Y = 72;
+
+function kindOf(node: Node | undefined): NodeKind {
+    return node?.kind === "note" ? "note" : "circle";
+}
+
+// Bounding-circle radius per kind: circles use their radius, notes use
+// the half-diagonal so rotation-proof clearance holds in every direction.
+export function nodeRadius(kind: NodeKind, diameter: number = NODE_DIAMETER): number {
+    if (kind === "note") return Math.hypot(NOTE_WIDTH, NOTE_HEIGHT) / 2;
+    return diameter / 2;
+}
+
+export function nodeHalfExtents(kind: NodeKind, diameter: number = NODE_DIAMETER): { rx: number; ry: number } {
+    if (kind === "note") return { rx: NOTE_WIDTH / 2, ry: NOTE_HEIGHT / 2 };
+    return { rx: diameter / 2, ry: diameter / 2 };
+}
 
 export type Position = { x: number; y: number };
 
@@ -37,10 +56,6 @@ export function computeLayout(
     const gapX = opts?.gapX ?? GAP_X;
     const gapY = opts?.gapY ?? GAP_Y;
     const diameter = opts?.nodeDiameter ?? NODE_DIAMETER;
-    const step = diameter + gapY;
-    const radius = diameter / 2;
-    // Inter-quadrant gap sized to roughly gapX at one radial step, clamped.
-    const marginDeg = Math.min(20, Math.max(2, ((gapX / step) * 180) / Math.PI / 2));
 
     const positions = new Map<string, Position>();
     const hiddenIds = new Set<string>();
@@ -112,6 +127,17 @@ export function computeLayout(
         return (childrenMap.get(id) ?? []).filter((c) => visibleIds.has(c.id));
     }
 
+    // Radial step sized by the largest visible footprint, so notes get
+    // room without moving circle-only maps (max radius 44 keeps step).
+    let maxVisibleRadius = diameter / 2;
+    for (const id of visibleIds) {
+        const r = nodeRadius(kindOf(nodeById.get(id)), diameter);
+        if (r > maxVisibleRadius) maxVisibleRadius = r;
+    }
+    const step = maxVisibleRadius * 2 + gapY;
+    // Inter-quadrant gap sized to roughly gapX at one radial step, clamped.
+    const marginDeg = Math.min(20, Math.max(2, ((gapX / step) * 180) / Math.PI / 2));
+
     // Visible leaf count per node weights each sibling's share of its quadrant.
     const leafCount = new Map<string, number>();
     const counting = new Set<string>();
@@ -134,9 +160,14 @@ export function computeLayout(
     const placementVisited = new Set<string>();
     const toRad = Math.PI / 180;
 
-    function clashes(x: number, y: number): boolean {
-        for (const p of positions.values()) {
-            if (Math.hypot(p.x - x, p.y - y) < diameter) return true;
+    function radiusOf(id: string): number {
+        return nodeRadius(kindOf(nodeById.get(id)), diameter);
+    }
+
+    function clashes(x: number, y: number, kind: NodeKind): boolean {
+        const r = nodeRadius(kind, diameter);
+        for (const [id, p] of positions) {
+            if (Math.hypot(p.x - x, p.y - y) < r + radiusOf(id)) return true;
         }
         return false;
     }
@@ -164,31 +195,33 @@ export function computeLayout(
     // visible parent, so this ends up equal to the returned edge list.
     const placedEdges: { from: string; to: string }[] = [];
 
-    // True when edge parent→q crosses no placed edge and keeps half-diameter
-    // clearance between q and placed edges and between placed nodes and itself.
-    function edgeClean(parentId: string, px: number, py: number, q: Position): boolean {
+    // True when edge parent→q crosses no placed edge and keeps
+    // bounding-radius clearance between q and placed edges and between
+    // placed nodes and itself.
+    function edgeClean(parentId: string, px: number, py: number, q: Position, qKind: NodeKind): boolean {
         const p = { x: px, y: py };
+        const qR = nodeRadius(qKind, diameter);
         for (const e of placedEdges) {
             if (e.from === parentId || e.to === parentId) continue;
             const a = positions.get(e.from);
             const b = positions.get(e.to);
             if (!a || !b) continue;
             if (edgesCross(p, q, a, b)) return false;
-            if (distToSeg(q, a, b) < diameter / 2 - 1e-6) return false;
+            if (distToSeg(q, a, b) < qR - 1e-6) return false;
         }
         for (const [id, n] of positions) {
             if (id === parentId) continue;
-            if (distToSeg(n, p, q) < diameter / 2 - 1e-6) return false;
+            if (distToSeg(n, p, q) < radiusOf(id) - 1e-6) return false;
         }
         return true;
     }
 
-    function resolveOverlap(px: number, py: number, x: number, y: number): Position {
+    function resolveOverlap(px: number, py: number, x: number, y: number, kind: NodeKind): Position {
         // A branch can fold back onto placed nodes (e.g. a west child of an
         // east node lands on the root). Push outward along the same ray until
-        // clear so every pair stays at least one diameter apart.
+        // clear so every pair stays at least the sum of radii apart.
         for (let i = 0; i < 50; i++) {
-            if (!clashes(x, y)) return { x, y };
+            if (!clashes(x, y, kind)) return { x, y };
             const dx = x - px;
             const dy = y - py;
             const len = Math.hypot(dx, dy) || 1;
@@ -207,12 +240,12 @@ export function computeLayout(
     // same ray can never make the child nearer its parent than its
     // grandparent, so rotate around the parent instead and take the finest
     // bearing that is clash-free with the parent still nearest.
-    function placeReadable(parentId: string, px: number, py: number, baseAngle: number): Position {
+    function placeReadable(parentId: string, px: number, py: number, baseAngle: number, kind: NodeKind): Position {
         for (const deg of FINE_DEGS) {
             const a = baseAngle + deg * toRad;
             const x = px + step * Math.cos(a);
             const y = py + step * Math.sin(a);
-            if (clashes(x, y)) continue;
+            if (clashes(x, y, kind)) continue;
             let nearest = true;
             for (const p of positions.values()) {
                 if (p.x === px && p.y === py) continue;
@@ -222,30 +255,30 @@ export function computeLayout(
                 }
             }
             if (!nearest) continue;
-            if (!edgeClean(parentId, px, py, { x, y })) continue;
+            if (!edgeClean(parentId, px, py, { x, y }, kind)) continue;
             return { x, y };
         }
         const raw = { x: px + step * Math.cos(baseAngle), y: py + step * Math.sin(baseAngle) };
-        return resolveOverlap(px, py, raw.x, raw.y);
+        return resolveOverlap(px, py, raw.x, raw.y, kind);
     }
 
     // Repair for placements whose straight edge would cross a placed edge or
     // crowd a corridor. For each bearing, finest first, push out along that
     // ray to the smallest clash-free radius before accepting it, so direction
     // bends as little as readability allows.
-    function placeSeparated(parentId: string, px: number, py: number, baseAngle: number): Position {
+    function placeSeparated(parentId: string, px: number, py: number, baseAngle: number, kind: NodeKind): Position {
         const gpId = parentById.get(parentId) ?? null;
         const gp = gpId ? positions.get(gpId) : undefined;
         for (const deg of FINE_DEGS) {
             const a = baseAngle + deg * toRad;
             const raw = { x: px + step * Math.cos(a), y: py + step * Math.sin(a) };
-            const q = resolveOverlap(px, py, raw.x, raw.y);
+            const q = resolveOverlap(px, py, raw.x, raw.y, kind);
             if (gp && Math.hypot(q.x - gp.x, q.y - gp.y) < Math.hypot(q.x - px, q.y - py) - 1e-6) continue;
-            if (!edgeClean(parentId, px, py, q)) continue;
+            if (!edgeClean(parentId, px, py, q, kind)) continue;
             return q;
         }
         const raw = { x: px + step * Math.cos(baseAngle), y: py + step * Math.sin(baseAngle) };
-        return resolveOverlap(px, py, raw.x, raw.y);
+        return resolveOverlap(px, py, raw.x, raw.y, kind);
     }
 
     function placeChildren(parentId: string, px: number, py: number): void {
@@ -276,12 +309,13 @@ export function computeLayout(
                 const angle = base - half + frac * half * 2;
                 const gpId = parentById.get(parentId) ?? null;
                 const gp = gpId ? positions.get(gpId) : undefined;
+                const childKind = kindOf(child);
                 const raw = { x: px + step * Math.cos(angle), y: py + step * Math.sin(angle) };
                 let pos =
                     gp && Math.hypot(raw.x - gp.x, raw.y - gp.y) < step + 1e-9
-                        ? placeReadable(parentId, px, py, angle)
-                        : resolveOverlap(px, py, raw.x, raw.y);
-                if (!edgeClean(parentId, px, py, pos)) pos = placeSeparated(parentId, px, py, angle);
+                        ? placeReadable(parentId, px, py, angle, childKind)
+                        : resolveOverlap(px, py, raw.x, raw.y, childKind);
+                if (!edgeClean(parentId, px, py, pos, childKind)) pos = placeSeparated(parentId, px, py, angle, childKind);
                 positions.set(child.id, pos);
                 placedEdges.push({ from: parentId, to: child.id });
                 acc += w;
@@ -304,7 +338,7 @@ export function computeLayout(
         }
     }
 
-    // Bounds with radius padding
+    // Bounds with per-kind half-extent padding
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
@@ -315,11 +349,12 @@ export function computeLayout(
         minY = 0;
         maxY = 0;
     } else {
-        for (const p of positions.values()) {
-            minX = Math.min(minX, p.x - radius);
-            maxX = Math.max(maxX, p.x + radius);
-            minY = Math.min(minY, p.y - radius);
-            maxY = Math.max(maxY, p.y + radius);
+        for (const [id, p] of positions) {
+            const { rx, ry } = nodeHalfExtents(kindOf(nodeById.get(id)), diameter);
+            minX = Math.min(minX, p.x - rx);
+            maxX = Math.max(maxX, p.x + rx);
+            minY = Math.min(minY, p.y - ry);
+            maxY = Math.max(maxY, p.y + ry);
         }
     }
 

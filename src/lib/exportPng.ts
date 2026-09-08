@@ -1,4 +1,4 @@
-import { NODE_DIAMETER } from "./layout";
+import { NODE_DIAMETER, NOTE_HEIGHT, NOTE_WIDTH } from "./layout";
 import { TOKENS } from "../theme/tokens";
 import type { Node } from "../types/node";
 
@@ -10,6 +10,9 @@ export const EXPORT_NODE_STROKE = TOKENS.nodeStroke;
 export const EXPORT_TEXT_COLOR = TOKENS.text;
 export const EXPORT_FONT_FAMILY = TOKENS.fontSans;
 export const MAX_EXPORT_SIDE = 4096;
+export const NOTE_MAX_CHARS_PER_LINE = 20;
+export const NOTE_MAX_LINES = 6;
+export const NOTE_CORNER_RADIUS = 12;
 
 export type ExportBounds = {
     minX: number;
@@ -99,6 +102,42 @@ export function wrapLinesPure(text: string, maxCharsPerLine = 12, maxLines = 3):
     return lines;
 }
 
+export function wrapNoteLinesPure(text: string): string[] {
+    return wrapLinesPure(text, NOTE_MAX_CHARS_PER_LINE, NOTE_MAX_LINES);
+}
+
+export function noteRectForExport(
+    cx: number,
+    cy: number,
+    scale: number,
+): { x: number; y: number; width: number; height: number } {
+    const width = NOTE_WIDTH * scale;
+    const height = NOTE_HEIGHT * scale;
+    return { x: cx - width / 2, y: cy - height / 2, width, height };
+}
+
+function traceRoundRect(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+): void {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.arcTo(x + width, y, x + width, y + r, r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.arcTo(x + width, y + height, x + width - r, y + height, r);
+    ctx.lineTo(x + r, y + height);
+    ctx.arcTo(x, y + height, x, y + height - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+}
+
 export function resolveExportScale(
     padded: ExportBounds,
     devicePixelRatio: number = 1,
@@ -165,21 +204,33 @@ export function renderMapToCanvas(args: {
         const pos = positions.get(node.id);
         if (!pos) continue;
         const [cx, cy] = toPx(pos.x, pos.y);
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.fillStyle = EXPORT_NODE_FILL;
-        ctx.fill();
-        ctx.strokeStyle = EXPORT_NODE_STROKE;
-        ctx.lineWidth = 1 * scale;
-        ctx.stroke();
+        const isNote = node.kind === "note";
+        if (isNote) {
+            const rect = noteRectForExport(cx, cy, scale);
+            traceRoundRect(ctx, rect.x, rect.y, rect.width, rect.height, NOTE_CORNER_RADIUS * scale);
+            ctx.fillStyle = EXPORT_NODE_FILL;
+            ctx.fill();
+            ctx.strokeStyle = EXPORT_NODE_STROKE;
+            ctx.lineWidth = 1 * scale;
+            ctx.stroke();
+        } else {
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.fillStyle = EXPORT_NODE_FILL;
+            ctx.fill();
+            ctx.strokeStyle = EXPORT_NODE_STROKE;
+            ctx.lineWidth = 1 * scale;
+            ctx.stroke();
+        }
 
-        const lines = wrapLinesPure(node.text);
+        const lines = isNote ? wrapNoteLinesPure(node.text) : wrapLinesPure(node.text);
         if (lines.length === 0) continue;
         ctx.fillStyle = EXPORT_TEXT_COLOR;
         const lineHeight = fontSize * 1.2;
         const startY = cy - ((lines.length - 1) * lineHeight) / 2;
+        const maxWidth = isNote ? NOTE_WIDTH * scale - 24 * scale : radius * 2 - 8 * scale;
         for (let i = 0; i < lines.length; i++) {
-            ctx.fillText(lines[i], cx, startY + i * lineHeight, radius * 2 - 8 * scale);
+            ctx.fillText(lines[i], cx, startY + i * lineHeight, maxWidth);
         }
     }
 

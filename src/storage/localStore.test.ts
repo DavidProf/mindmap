@@ -10,17 +10,21 @@ import {
     isNameUniquePure,
     loadNodes,
     loadProjects,
+    MAX_NOTE_TEXT_LENGTH,
+    maxTextLengthForKind,
+    saveNodes,
     saveProjects,
     validateNodeTextPure,
     validateProjectNamePure,
 } from "./localStore";
+import { isNodeKind, normalizeNodeKind, normalizeNodes } from "../types/node";
 import type { Project, Viewport } from "../types/project";
 import type { Node } from "../types/node";
 
 const STAMP = "2026-01-01T00:00:00.000Z";
 
 function node(id: string, projectId: string, parentId: string | null): Node {
-    return { id, projectId, parentId, text: id, side: "south", collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+    return { id, projectId, parentId, text: id, kind: "circle", side: "south", collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 function project(id: string, name: string, viewport: Viewport = { x: 0, y: 0, zoom: 1 }): Project {
@@ -84,11 +88,61 @@ describe("validateNodeTextPure", () => {
     it("rejects blank text", () => {
         expect(validateNodeTextPure("  ")).toBe("Text is required.");
     });
-    it("rejects text over 30 characters", () => {
+    it("rejects circle text over 30 characters", () => {
         expect(validateNodeTextPure("x".repeat(31))).toBe("Text must be 30 characters or less.");
     });
-    it("accepts 30 characters", () => {
+    it("accepts 30 characters for circles", () => {
         expect(validateNodeTextPure("x".repeat(30))).toBeNull();
+    });
+    it("accepts long text for notes up to 280 characters", () => {
+        expect(validateNodeTextPure("x".repeat(31), "note")).toBeNull();
+        expect(validateNodeTextPure("x".repeat(MAX_NOTE_TEXT_LENGTH), "note")).toBeNull();
+        expect(validateNodeTextPure("x".repeat(MAX_NOTE_TEXT_LENGTH + 1), "note")).toBe(
+            `Text must be ${MAX_NOTE_TEXT_LENGTH} characters or less.`,
+        );
+    });
+    it("rejects blank note text", () => {
+        expect(validateNodeTextPure("   ", "note")).toBe("Text is required.");
+    });
+});
+
+describe("node kind", () => {
+    it("picks the length limit by kind", () => {
+        expect(maxTextLengthForKind("circle")).toBe(30);
+        expect(maxTextLengthForKind("note")).toBe(MAX_NOTE_TEXT_LENGTH);
+        expect(maxTextLengthForKind("bogus")).toBe(30);
+    });
+    it("guards and normalizes kind values", () => {
+        expect(isNodeKind("note")).toBe(true);
+        expect(isNodeKind("circle")).toBe(true);
+        expect(isNodeKind("photo")).toBe(false);
+        expect(normalizeNodeKind("note")).toBe("note");
+        expect(normalizeNodeKind(undefined)).toBe("circle");
+        expect(normalizeNodeKind("bogus")).toBe("circle");
+    });
+    it("normalizes legacy nodes missing kind to circle", () => {
+        const legacy = { ...node("r1", "p1", null), kind: undefined as unknown as "circle" };
+        expect(normalizeNodes([legacy])).toEqual([{ ...legacy, kind: "circle" }]);
+    });
+    it("normalizes invalid kind to circle and keeps valid notes", () => {
+        const bad = { ...node("a", "p1", null), kind: "photo" as unknown as "circle" };
+        const note = { ...node("b", "p1", null), kind: "note" as const };
+        const out = normalizeNodes([bad, note]);
+        expect(out[0].kind).toBe("circle");
+        expect(out[1]).toBe(note);
+    });
+    it("loadNodes normalizes stored legacy records", () => {
+        __resetForTests();
+        const legacy = { ...node("r1", "p1", null), kind: undefined as unknown as "circle" };
+        stubWindow({ "mindmap:nodes": JSON.stringify([legacy]) });
+        expect(loadNodes()).toEqual([{ ...legacy, kind: "circle" }]);
+    });
+    it("round-trips note kind through storage", () => {
+        __resetForTests();
+        stubWindow();
+        const noteNode = { ...node("n1", "p1", null), kind: "note" as const, text: "a longer paragraph" };
+        saveNodes([noteNode]);
+        expect(loadNodes()).toEqual([noteNode]);
     });
 });
 

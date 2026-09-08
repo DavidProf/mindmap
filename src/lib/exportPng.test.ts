@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
     buildExportFilename,
     EXPORT_PADDING,
+    NOTE_MAX_CHARS_PER_LINE,
+    NOTE_MAX_LINES,
+    noteRectForExport,
     paddedExportBounds,
     resolveExportScale,
     wrapLinesPure,
+    wrapNoteLinesPure,
 } from "./exportPng";
-import { NODE_DIAMETER } from "./layout";
+import { NODE_DIAMETER, NOTE_HEIGHT, NOTE_WIDTH } from "./layout";
 
 describe("buildExportFilename", () => {
     it("slugifies the project name", () => {
@@ -92,5 +96,32 @@ describe("wrapLinesPure edge cases", () => {
     it("keeps emoji surrogate pairs intact", () => {
         expect(wrapLinesPure("😀 hi")).toEqual(["😀 hi"]);
         expect(wrapLinesPure("😀".repeat(7))).toEqual(["😀".repeat(6), "😀"]);
+    });
+});
+
+describe("note export helpers", () => {
+    it("wraps note text wider and longer than circles", () => {
+        expect(NOTE_MAX_CHARS_PER_LINE).toBeGreaterThan(12);
+        expect(NOTE_MAX_LINES).toBeGreaterThan(3);
+        expect(wrapNoteLinesPure("hello wonderful map")).toEqual(["hello wonderful map"]);
+        const long = Array.from({ length: 40 }, (_, i) => `w${i}`).join(" ");
+        const lines = wrapNoteLinesPure(long);
+        expect(lines.length).toBeGreaterThan(3);
+        expect(lines.length).toBeLessThanOrEqual(NOTE_MAX_LINES);
+        for (const line of lines) expect(line.length).toBeLessThanOrEqual(NOTE_MAX_CHARS_PER_LINE + 1);
+    });
+
+    it("truncates very long notes with an ellipsis", () => {
+        const lines = wrapNoteLinesPure("word ".repeat(200).trim());
+        expect(lines).toHaveLength(NOTE_MAX_LINES);
+        expect(lines[NOTE_MAX_LINES - 1].endsWith("…")).toBe(true);
+    });
+
+    it("centers the note rect on the node position", () => {
+        const rect = noteRectForExport(100, 50, 2);
+        expect(rect.width).toBe(NOTE_WIDTH * 2);
+        expect(rect.height).toBe(NOTE_HEIGHT * 2);
+        expect(rect.x).toBe(100 - NOTE_WIDTH);
+        expect(rect.y).toBe(50 - NOTE_HEIGHT);
     });
 });

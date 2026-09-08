@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import type { Node, NodeSide } from "../../types/node";
+import type { Node, NodeKind, NodeSide } from "../../types/node";
 import type { Viewport } from "../../types/project";
 import type { Position } from "../../lib/layout";
-import { countSubtreeNodesPure, getSubtreeCountsPure } from "../../storage/localStore";
+import { countSubtreeNodesPure, getSubtreeCountsPure, MAX_NODE_TEXT_LENGTH } from "../../storage/localStore";
 import { formatZoomPct } from "../../lib/zoom";
 import useViewport from "./useViewport";
 import type { CanvasBounds } from "./useViewport";
 import type { StorageBackend } from "../../storage/backend";
 import NodeCircle from "./NodeCircle";
+import NodeRect from "./NodeRect";
 import NodeContextMenu from "./NodeContextMenu";
 import type { NodeMenuState } from "./NodeContextMenu";
+import NodeConvertDialog from "./NodeConvertDialog";
+import type { NodeConvertTarget } from "./NodeConvertDialog";
 import NodeDeleteDialog from "./NodeDeleteDialog";
 import type { NodeDeleteTarget } from "./NodeDeleteDialog";
 import "./TreeCanvas.css";
@@ -26,15 +29,17 @@ type TreeCanvasProps = {
     recenterSignal?: number;
     onAddChild?: (parentId: string, text: string, side: NodeSide) => Promise<Node | null>;
     onUpdateText?: (nodeId: string, text: string) => Promise<Node | null>;
+    onSetKind?: (nodeId: string, kind: NodeKind, opts?: { allowTruncate?: boolean }) => Promise<Node | null>;
     onToggleCollapsed?: (nodeId: string) => Promise<Node | null>;
     onDeleteSubtree?: (nodeId: string) => Promise<{ deletedIds: string[] } | null>;
 };
 
-export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
+export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [menu, setMenu] = useState<NodeMenuState | null>(null);
+    const [convertTarget, setConvertTarget] = useState<NodeConvertTarget | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<NodeDeleteTarget | null>(null);
     const visibleNodes = nodes.filter((n) => positions.has(n.id));
 
@@ -109,6 +114,32 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         const target = menu?.nodeId;
         closeMenu();
         if (target) handleEditStart(target);
+    }
+
+    async function handleMenuConvert(kind: NodeKind) {
+        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
+        closeMenu(target?.id);
+        if (!target || target.kind === kind) return;
+        // Long notes overflow circles: confirm truncation before converting.
+        if (kind === "circle" && target.text.trim().length > MAX_NODE_TEXT_LENGTH) {
+            setConvertTarget({ nodeId: target.id, text: target.text, from: "note", to: "circle" });
+            return;
+        }
+        await onSetKind?.(target.id, kind);
+    }
+
+    function handleCancelConvert() {
+        const target = convertTarget;
+        setConvertTarget(null);
+        if (target) focusCircle(target.nodeId);
+    }
+
+    async function handleConfirmConvert() {
+        const target = convertTarget;
+        if (!target) return;
+        setConvertTarget(null);
+        await onSetKind?.(target.nodeId, target.to, { allowTruncate: true });
+        focusCircle(target.nodeId);
     }
 
     async function handleMenuToggleCollapse() {
@@ -244,41 +275,42 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                 {visibleNodes.map((n) => {
                     const pos = positions.get(n.id);
                     if (!pos) return null;
-                    return (
-                        <NodeCircle
-                            key={n.id}
-                            id={n.id}
-                            text={n.text}
-                            x={pos.x}
-                            y={pos.y}
-                            selected={selectedId === n.id}
-                            editing={editingId === n.id}
-                            onSelect={handleSelect}
-                            onAddChild={handlePlus}
-                            onEditStart={handleEditStart}
-                            onCommitText={handleCommitText}
-                            onCancelEdit={handleCancelEdit}
-                            onContextMenu={handleNodeContextMenu}
-                            onToggleCollapsed={(id) => void onToggleCollapsed?.(id)}
-                            collapsed={n.collapsed}
-                            hiddenCount={n.collapsed ? (subtreeCounts.get(n.id) ?? 1) - 1 : 0}
-                        />
-                    );
+                    const nodeProps = {
+                        id: n.id,
+                        text: n.text,
+                        x: pos.x,
+                        y: pos.y,
+                        selected: selectedId === n.id,
+                        editing: editingId === n.id,
+                        onSelect: handleSelect,
+                        onAddChild: handlePlus,
+                        onEditStart: handleEditStart,
+                        onCommitText: handleCommitText,
+                        onCancelEdit: handleCancelEdit,
+                        onContextMenu: handleNodeContextMenu,
+                        onToggleCollapsed: (id: string) => void onToggleCollapsed?.(id),
+                        collapsed: n.collapsed,
+                        hiddenCount: n.collapsed ? (subtreeCounts.get(n.id) ?? 1) - 1 : 0,
+                    };
+                    return n.kind === "note" ? <NodeRect key={n.id} {...nodeProps} /> : <NodeCircle key={n.id} {...nodeProps} />;
                 })}
             </div>
             {menuTarget && (
                 <NodeContextMenu
                     menu={menu}
                     text={menuTarget.text}
+                    kind={menuTarget.kind}
                     collapsed={menuTarget.collapsed}
                     hasChildren={menuHasChildren}
                     isRoot={menuTarget.id === rootNodeId}
                     onClose={() => closeMenu(menu?.nodeId)}
                     onEdit={handleMenuEdit}
+                    onConvert={(kind) => void handleMenuConvert(kind)}
                     onToggleCollapse={handleMenuToggleCollapse}
                     onDelete={handleMenuDelete}
                 />
             )}
+            <NodeConvertDialog target={convertTarget} onCancel={handleCancelConvert} onConfirm={() => void handleConfirmConvert()} />
             <NodeDeleteDialog target={deleteTarget} onCancel={handleCancelDelete} onConfirm={handleConfirmDelete} />
             <div
                 className="tree-zoom-badge"

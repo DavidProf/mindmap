@@ -5,17 +5,20 @@ import "./TreeCanvas.css";
 type NodeEditorProps = {
     nodeId: string;
     initialText: string;
+    maxLength?: number;
+    multiline?: boolean;
     onCommit: (text: string) => void;
     onCancel: () => void;
 };
 
-export default function NodeEditor({ nodeId, initialText, onCommit, onCancel }: NodeEditorProps) {
+export default function NodeEditor({ nodeId, initialText, maxLength = MAX_NODE_TEXT_LENGTH, multiline = false, onCommit, onCancel }: NodeEditorProps) {
     const [draft, setDraft] = useState(initialText);
     const inputRef = useRef<HTMLInputElement>(null);
+    const areaRef = useRef<HTMLTextAreaElement>(null);
     const doneRef = useRef(false);
 
     useEffect(() => {
-        const input = inputRef.current;
+        const input = inputRef.current ?? areaRef.current;
         if (input) {
             input.focus();
             input.select();
@@ -31,6 +34,44 @@ export default function NodeEditor({ nodeId, initialText, onCommit, onCancel }: 
         else onCancel();
     }
 
+    // Notes commit on blur or Ctrl/Cmd+Enter so plain Enter adds a newline.
+    if (multiline) {
+        return (
+            <div className="node-editor" data-testid={`node-editor-${nodeId}`}>
+                <textarea
+                    ref={areaRef}
+                    className="node-editor__textarea"
+                    aria-label="Edit node text"
+                    value={draft}
+                    maxLength={maxLength}
+                    rows={4}
+                    onChange={(e) => setDraft(e.target.value.slice(0, maxLength))}
+                    onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                            e.preventDefault();
+                            finish(true);
+                        } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            finish(false);
+                        }
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                    onBlur={() => finish(true)}
+                />
+                <span className="node-editor__counter" aria-hidden="true">
+                    {draft.length}/{maxLength}
+                </span>
+            </div>
+        );
+    }
+
     return (
         <div className="node-editor" data-testid={`node-editor-${nodeId}`}>
             <input
@@ -38,8 +79,8 @@ export default function NodeEditor({ nodeId, initialText, onCommit, onCancel }: 
                 className="node-editor__input"
                 aria-label="Edit node text"
                 value={draft}
-                maxLength={MAX_NODE_TEXT_LENGTH}
-                onChange={(e) => setDraft(e.target.value.slice(0, MAX_NODE_TEXT_LENGTH))}
+                maxLength={maxLength}
+                onChange={(e) => setDraft(e.target.value.slice(0, maxLength))}
                 onKeyDown={(e) => {
                     e.stopPropagation();
                     if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -60,7 +101,7 @@ export default function NodeEditor({ nodeId, initialText, onCommit, onCancel }: 
                 onBlur={() => finish(true)}
             />
             <span className="node-editor__counter" aria-hidden="true">
-                {draft.length}/{MAX_NODE_TEXT_LENGTH}
+                {draft.length}/{maxLength}
             </span>
         </div>
     );

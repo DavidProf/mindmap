@@ -1,4 +1,5 @@
 import type { Node } from "../types/node";
+import { normalizeNodes } from "../types/node";
 import type { Project } from "../types/project";
 import { loadNodes, loadProjects, saveNodes, saveProjects } from "./localStore";
 
@@ -24,7 +25,7 @@ export function createLocalStorageBackend(): StorageBackend {
 
 export function createMemoryBackend(seed?: { projects?: Project[]; nodes?: Node[] }): StorageBackend {
     let projects = [...(seed?.projects ?? [])];
-    let nodes = [...(seed?.nodes ?? [])];
+    let nodes = normalizeNodes([...(seed?.nodes ?? [])]);
     return {
         kind: "memory",
         loadProjects: () => Promise.resolve([...projects]),

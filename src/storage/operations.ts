@@ -1,5 +1,5 @@
-import type { Node, NodeSide } from "../types/node";
-import { isNodeSide } from "../types/node";
+import type { Node, NodeKind, NodeSide } from "../types/node";
+import { isNodeKind, isNodeSide, normalizeNodes } from "../types/node";
 import type { Project, Viewport } from "../types/project";
 import type { StorageBackend } from "./backend";
 import {
@@ -9,6 +9,7 @@ import {
     genId,
     getNodeCountForProjectPure,
     getSubtreeIdsPure,
+    MAX_NODE_TEXT_LENGTH,
     nowIso,
     saveNodes,
     saveProjects,
@@ -66,6 +67,7 @@ export async function createProjectAsync(backend: StorageBackend, name: string):
         projectId: id,
         parentId: null,
         text: trimmed,
+        kind: "circle",
         side: null,
         collapsed: false,
         createdAt: now,
@@ -122,8 +124,10 @@ export async function addChildNodeAsync(
     parentId: string,
     text: string,
     side: NodeSide,
+    kind: NodeKind = "circle",
 ): Promise<Node> {
-    const err = validateNodeTextPure(text);
+    if (!isNodeKind(kind)) throw new Error("Invalid kind.");
+    const err = validateNodeTextPure(text, kind);
     if (err) throw new Error(err);
     if (!isNodeSide(side)) throw new Error("Invalid side.");
 
@@ -141,6 +145,7 @@ export async function addChildNodeAsync(
         projectId,
         parentId,
         text: text.trim(),
+        kind,
         side,
         collapsed: false,
         createdAt: now,
@@ -156,16 +161,47 @@ export async function addChildNodeAsync(
 }
 
 export async function updateNodeTextAsync(backend: StorageBackend, nodeId: string, text: string): Promise<Node> {
-    const err = validateNodeTextPure(text);
-    if (err) throw new Error(err);
-
-    const nodes = await backend.loadNodes();
+    const nodes = normalizeNodes(await backend.loadNodes());
     const idx = nodes.findIndex((n) => n.id === nodeId);
     if (idx === -1) throw new Error("Node not found.");
+
+    const err = validateNodeTextPure(text, nodes[idx].kind);
+    if (err) throw new Error(err);
 
     const trimmed = text.trim();
     if (nodes[idx].text === trimmed) return nodes[idx];
     const updated: Node = { ...nodes[idx], text: trimmed, updatedAt: bumpedIso(nodes[idx].updatedAt) };
+    nodes[idx] = updated;
+    await backend.saveNodes(nodes);
+
+    const projects = await backend.loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
+    if (pIdx !== -1) {
+        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+        await backend.saveProjects(projects);
+        mirrorToLocalStorage(projects, nodes);
+    }
+    return updated;
+}
+
+export async function setNodeKindAsync(
+    backend: StorageBackend,
+    nodeId: string,
+    kind: NodeKind,
+    opts?: { allowTruncate?: boolean },
+): Promise<Node> {
+    if (!isNodeKind(kind)) throw new Error("Invalid kind.");
+    const nodes = normalizeNodes(await backend.loadNodes());
+    const idx = nodes.findIndex((n) => n.id === nodeId);
+    if (idx === -1) throw new Error("Node not found.");
+    if (nodes[idx].kind === kind) return nodes[idx];
+
+    let text = nodes[idx].text;
+    if (kind === "circle" && text.trim().length > MAX_NODE_TEXT_LENGTH) {
+        if (!opts?.allowTruncate) throw new Error(`Text exceeds ${MAX_NODE_TEXT_LENGTH} characters; confirm truncation to convert.`);
+        text = text.trim().slice(0, MAX_NODE_TEXT_LENGTH);
+    }
+    const updated: Node = { ...nodes[idx], kind, text, updatedAt: bumpedIso(nodes[idx].updatedAt) };
     nodes[idx] = updated;
     await backend.saveNodes(nodes);
 
