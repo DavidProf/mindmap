@@ -11,6 +11,7 @@ import {
     renameProjectAsync,
     setNodeCollapsedAsync,
     setNodeKindAsync,
+    setNodeMediaAsync,
     setNodeUrlAsync,
     setViewportAsync,
     updateNodeTextAsync,
@@ -303,6 +304,50 @@ describe("node url (13b)", () => {
         await setNodeUrlAsync(backend, child.id, "https://example.com");
         const note = await setNodeKindAsync(backend, child.id, "note");
         expect(note.url).toBe("https://example.com/");
+    });
+    it("defaults media to null on create", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const root = (await backend.loadNodes()).find((n) => n.id === project.rootNodeId)!;
+        expect(root.media).toBeNull();
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        expect(child.media).toBeNull();
+    });
+    it("sets, normalizes, and clears media with project bump", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const before = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
+        const imaged = await setNodeMediaAsync(backend, child.id, { kind: "image", src: "example.com/a.png" });
+        expect(imaged.media).toEqual({ kind: "image", src: "https://example.com/a.png" });
+        const after = (await backend.loadProjects()).find((p) => p.id === project.id)!.updatedAt;
+        expect(Date.parse(after) >= Date.parse(before)).toBe(true);
+        const cleared = await setNodeMediaAsync(backend, child.id, null);
+        expect(cleared.media).toBeNull();
+    });
+    it("rejects invalid media and unknown nodes", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        await expect(
+            setNodeMediaAsync(backend, child.id, { kind: "image", src: "javascript:alert(1)" }),
+        ).rejects.toThrow("Enter a valid http(s) URL.");
+        await expect(
+            setNodeMediaAsync(backend, child.id, { kind: "audio" as unknown as "image", src: "https://example.com/a.mp3" }),
+        ).rejects.toThrow("Choose image or video.");
+        await expect(
+            setNodeMediaAsync(backend, "missing", { kind: "video", src: "https://example.com/v.mp4" }),
+        ).rejects.toThrow("Node not found.");
+    });
+    it("preserves media across kind convert and url set", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        await setNodeMediaAsync(backend, child.id, { kind: "video", src: "https://example.com/v.mp4" });
+        const note = await setNodeKindAsync(backend, child.id, "note");
+        expect(note.media).toEqual({ kind: "video", src: "https://example.com/v.mp4" });
+        const linked = await setNodeUrlAsync(backend, child.id, "https://example.com");
+        expect(linked.media).toEqual({ kind: "video", src: "https://example.com/v.mp4" });
     });
 });
 

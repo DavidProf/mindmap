@@ -1,4 +1,4 @@
-import type { Node, NodeKind, NodeSide } from "../types/node";
+import type { Node, NodeKind, NodeMedia, NodeSide } from "../types/node";
 import { isNodeKind, isNodeSide, normalizeNodes } from "../types/node";
 import type { Project, Viewport } from "../types/project";
 import type { StorageBackend } from "./backend";
@@ -10,10 +10,12 @@ import {
     getNodeCountForProjectPure,
     getSubtreeIdsPure,
     MAX_NODE_TEXT_LENGTH,
+    normalizeNodeMediaPure,
     normalizeNodeUrlPure,
     nowIso,
     saveNodes,
     saveProjects,
+    validateNodeMediaPure,
     validateNodeTextPure,
     validateNodeUrlPure,
     validateProjectNamePure,
@@ -71,6 +73,7 @@ export async function createProjectAsync(backend: StorageBackend, name: string):
         text: trimmed,
         kind: "circle",
         url: null,
+        media: null,
         side: null,
         collapsed: false,
         createdAt: now,
@@ -150,6 +153,7 @@ export async function addChildNodeAsync(
         text: text.trim(),
         kind,
         url: null,
+        media: null,
         side,
         collapsed: false,
         createdAt: now,
@@ -230,6 +234,41 @@ export async function setNodeUrlAsync(backend: StorageBackend, nodeId: string, u
     if ((nodes[idx].url ?? null) === nextUrl) return nodes[idx];
 
     const updated: Node = { ...nodes[idx], url: nextUrl, updatedAt: bumpedIso(nodes[idx].updatedAt) };
+    nodes[idx] = updated;
+    await backend.saveNodes(nodes);
+
+    const projects = await backend.loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
+    if (pIdx !== -1) {
+        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+        await backend.saveProjects(projects);
+        mirrorToLocalStorage(projects, nodes);
+    }
+    return updated;
+}
+
+export async function setNodeMediaAsync(
+    backend: StorageBackend,
+    nodeId: string,
+    media: NodeMedia | null,
+): Promise<Node> {
+    const nodes = normalizeNodes(await backend.loadNodes());
+    const idx = nodes.findIndex((n) => n.id === nodeId);
+    if (idx === -1) throw new Error("Node not found.");
+
+    const err = validateNodeMediaPure(media?.kind ?? null, media?.src ?? null);
+    if (err) throw new Error(err);
+    const nextMedia = normalizeNodeMediaPure(media);
+    const prevMedia = nodes[idx].media ?? null;
+    const same =
+        (nextMedia === null && prevMedia === null) ||
+        (nextMedia !== null &&
+            prevMedia !== null &&
+            nextMedia.kind === prevMedia.kind &&
+            nextMedia.src === prevMedia.src);
+    if (same) return nodes[idx];
+
+    const updated: Node = { ...nodes[idx], media: nextMedia, updatedAt: bumpedIso(nodes[idx].updatedAt) };
     nodes[idx] = updated;
     await backend.saveNodes(nodes);
 

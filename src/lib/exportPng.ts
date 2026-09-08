@@ -1,6 +1,7 @@
 import { NODE_DIAMETER, NOTE_HEIGHT, NOTE_WIDTH } from "./layout";
 import { TOKENS } from "../theme/tokens";
-import type { Node } from "../types/node";
+import { youtubeShortlinkPure } from "./media";
+import type { Node, NodeMedia } from "../types/node";
 
 export const EXPORT_PADDING = 48;
 export const EXPORT_BACKGROUND = TOKENS.bg;
@@ -8,6 +9,8 @@ export const EXPORT_EDGE_COLOR = TOKENS.line;
 export const EXPORT_NODE_FILL = TOKENS.nodeFill;
 export const EXPORT_NODE_STROKE = TOKENS.nodeStroke;
 export const EXPORT_TEXT_COLOR = TOKENS.text;
+export const EXPORT_MUTED_COLOR = TOKENS.muted;
+export const EXPORT_SHORTLINK_FONT_SIZE = 10;
 export const EXPORT_FONT_FAMILY = TOKENS.fontSans;
 export const MAX_EXPORT_SIDE = 4096;
 export const NOTE_MAX_CHARS_PER_LINE = 20;
@@ -106,8 +109,35 @@ export function wrapNoteLinesPure(text: string): string[] {
     return wrapLinesPure(text, NOTE_MAX_CHARS_PER_LINE, NOTE_MAX_LINES);
 }
 
+export function wrapExportTextPure(text: string, isNote: boolean, showPhoto: boolean): string[] {
+    if (showPhoto) return wrapLinesPure(text, NOTE_MAX_CHARS_PER_LINE, 3);
+    return isNote ? wrapNoteLinesPure(text) : wrapLinesPure(text);
+}
+
+export function hasDrawableImage(image: { naturalWidth: number; naturalHeight: number } | null | undefined): boolean {
+    return !!image && image.naturalWidth > 0 && image.naturalHeight > 0;
+}
+
 export const LINK_BADGE_RADIUS = 8;
 export const LINK_BADGE_GLYPH = "↗";
+
+export const MEDIA_BADGE_RADIUS = 8;
+
+export function shouldDrawMediaBadge(media: unknown): boolean {
+    if (typeof media !== "object" || media === null) return false;
+    const kind = (media as { kind?: unknown }).kind;
+    return kind === "image" || kind === "video";
+}
+
+export function mediaBadgeCenterPure(
+    cx: number,
+    cy: number,
+    scale: number,
+): { x: number; y: number; radius: number } {
+    const radius = MEDIA_BADGE_RADIUS * scale;
+    const rect = noteRectForExport(cx, cy, scale);
+    return { x: rect.x + radius + 2 * scale, y: rect.y + radius + 2 * scale, radius };
+}
 
 export function shouldDrawLinkBadge(url: unknown): boolean {
     return typeof url === "string" && url.trim().length > 0;
@@ -136,6 +166,22 @@ export function noteRectForExport(
     const width = NOTE_WIDTH * scale;
     const height = NOTE_HEIGHT * scale;
     return { x: cx - width / 2, y: cy - height / 2, width, height };
+}
+
+export function mediaWellForExport(
+    cx: number,
+    cy: number,
+    scale: number,
+): { x: number; y: number; width: number; height: number } {
+    const rect = noteRectForExport(cx, cy, scale);
+    const inset = 6 * scale;
+    const height = rect.height * 0.42;
+    return {
+        x: rect.x + inset,
+        y: rect.y + rect.height - inset - height,
+        width: rect.width - inset * 2,
+        height,
+    };
 }
 
 function traceRoundRect(
@@ -179,10 +225,12 @@ export function renderMapToCanvas(args: {
     bounds: ExportBounds;
     scale?: number;
     background?: string;
+    images?: Map<string, HTMLImageElement>;
 }): HTMLCanvasElement {
     const { nodes, positions, edges, bounds } = args;
     const scale = args.scale ?? 2;
     const background = args.background ?? EXPORT_BACKGROUND;
+    const images = args.images ?? new Map<string, HTMLImageElement>();
     const padded = paddedExportBounds(bounds);
     const width = Math.max(1, Math.round(padded.width * scale));
     const height = Math.max(1, Math.round(padded.height * scale));
@@ -226,7 +274,8 @@ export function renderMapToCanvas(args: {
         const pos = positions.get(node.id);
         if (!pos) continue;
         const [cx, cy] = toPx(pos.x, pos.y);
-        const isNote = node.kind === "note";
+        // Circles with media render as rectangles on canvas, mirroring layout.
+        const isNote = node.kind === "note" || node.media != null;
         if (isNote) {
             const rect = noteRectForExport(cx, cy, scale);
             traceRoundRect(ctx, rect.x, rect.y, rect.width, rect.height, NOTE_CORNER_RADIUS * scale);
@@ -245,12 +294,37 @@ export function renderMapToCanvas(args: {
             ctx.stroke();
         }
 
-        const lines = isNote ? wrapNoteLinesPure(node.text) : wrapLinesPure(node.text);
+        const loadedImage = images.get(node.id) ?? null;
+        const showPhoto = isNote && hasDrawableImage(loadedImage);
+        if (showPhoto && loadedImage) {
+            const well = mediaWellForExport(cx, cy, scale);
+            const iw = loadedImage.naturalWidth;
+            const ih = loadedImage.naturalHeight;
+            const fit = Math.max(well.width / iw, well.height / ih);
+            const dw = iw * fit;
+            const dh = ih * fit;
+            ctx.save();
+            traceRoundRect(ctx, well.x, well.y, well.width, well.height, 6 * scale);
+            ctx.clip();
+            ctx.drawImage(loadedImage, well.x + (well.width - dw) / 2, well.y + (well.height - dh) / 2, dw, dh);
+            ctx.restore();
+            traceRoundRect(ctx, well.x, well.y, well.width, well.height, 6 * scale);
+            ctx.strokeStyle = EXPORT_EDGE_COLOR;
+            ctx.lineWidth = 1 * scale;
+            ctx.stroke();
+        }
+        const lines = wrapExportTextPure(node.text, isNote, showPhoto);
         if (lines.length > 0) {
             ctx.fillStyle = EXPORT_TEXT_COLOR;
             const lineHeight = fontSize * 1.2;
-            const startY = cy - ((lines.length - 1) * lineHeight) / 2;
             const maxWidth = isNote ? NOTE_WIDTH * scale - 24 * scale : radius * 2 - 8 * scale;
+            let centerY = cy;
+            if (showPhoto) {
+                const rect = noteRectForExport(cx, cy, scale);
+                const well = mediaWellForExport(cx, cy, scale);
+                centerY = (rect.y + 4 * scale + (well.y - 4 * scale)) / 2;
+            }
+            const startY = centerY - ((lines.length - 1) * lineHeight) / 2;
             for (let i = 0; i < lines.length; i++) {
                 ctx.fillText(lines[i], cx, startY + i * lineHeight, maxWidth);
             }
@@ -269,6 +343,52 @@ export function renderMapToCanvas(args: {
             ctx.font = `${badge.radius * 1.1}px ${EXPORT_FONT_FAMILY}`;
             ctx.fillText(LINK_BADGE_GLYPH, badge.x, badge.y);
             ctx.font = `${fontSize}px ${EXPORT_FONT_FAMILY}`;
+        }
+
+        // Media placeholder only: external pixels are never fetched, so the
+        // canvas cannot taint and toBlob keeps working.
+        if (shouldDrawMediaBadge(node.media)) {
+            const badge = mediaBadgeCenterPure(cx, cy, scale);
+            ctx.beginPath();
+            ctx.arc(badge.x, badge.y, badge.radius, 0, Math.PI * 2);
+            ctx.fillStyle = background;
+            ctx.fill();
+            ctx.strokeStyle = EXPORT_NODE_STROKE;
+            ctx.lineWidth = 1 * scale;
+            ctx.stroke();
+            const mediaKind = (node.media as NodeMedia).kind;
+            if (mediaKind === "video") {
+                const r = badge.radius;
+                ctx.beginPath();
+                ctx.moveTo(badge.x - r * 0.35, badge.y - r * 0.45);
+                ctx.lineTo(badge.x - r * 0.35, badge.y + r * 0.45);
+                ctx.lineTo(badge.x + r * 0.5, badge.y);
+                ctx.closePath();
+                ctx.fillStyle = EXPORT_TEXT_COLOR;
+                ctx.fill();
+            } else {
+                const w = badge.radius;
+                const h = badge.radius * 0.75;
+                ctx.strokeStyle = EXPORT_TEXT_COLOR;
+                ctx.lineWidth = 1 * scale;
+                ctx.strokeRect(badge.x - w / 2, badge.y - h / 2, w, h);
+                ctx.fillStyle = EXPORT_TEXT_COLOR;
+                ctx.beginPath();
+                ctx.arc(badge.x - w * 0.2, badge.y - h * 0.15, Math.max(1, badge.radius * 0.15), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Print-friendly pointer: a shortlink above YouTube video nodes.
+        if (isNote && node.media?.kind === "video") {
+            const shortlink = youtubeShortlinkPure(node.media.src);
+            if (shortlink) {
+                const rect = noteRectForExport(cx, cy, scale);
+                ctx.fillStyle = EXPORT_MUTED_COLOR;
+                ctx.font = `${EXPORT_SHORTLINK_FONT_SIZE * scale}px ${EXPORT_FONT_FAMILY}`;
+                ctx.fillText(shortlink, cx, rect.y - 6 * scale, rect.width);
+                ctx.font = `${fontSize}px ${EXPORT_FONT_FAMILY}`;
+            }
         }
     }
 
@@ -290,6 +410,7 @@ export async function exportMapAsPng(args: {
     positions: Map<string, ExportPosition>;
     edges: ExportEdge[];
     bounds: ExportBounds;
+    images?: Map<string, HTMLImageElement>;
 }): Promise<string> {
     const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
     const padded = paddedExportBounds(args.bounds);
@@ -300,6 +421,7 @@ export async function exportMapAsPng(args: {
         edges: args.edges,
         bounds: args.bounds,
         scale,
+        images: args.images,
     });
     const blob = await canvasToBlob(canvas);
     const filename = buildExportFilename(args.projectName);

@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { NOTE_HEIGHT, NOTE_WIDTH } from "../../lib/layout";
-import type { NodeSide } from "../../types/node";
+import type { NodeMedia, NodeSide } from "../../types/node";
 import NodeEditor from "./NodeEditor";
 import NodeLinkBadge from "./NodeLinkBadge";
+import NodeMediaGlyph from "./NodeMediaGlyph";
 import { PLUS_POSITIONS, useNodeGestures } from "./useNodeGestures";
 import { MAX_NOTE_TEXT_LENGTH } from "../../storage/localStore";
 import "./TreeCanvas.css";
@@ -10,6 +12,7 @@ type NodeRectProps = {
     id: string;
     text: string;
     url: string | null;
+    media: NodeMedia | null;
     x: number;
     y: number;
     selected: boolean;
@@ -22,6 +25,7 @@ type NodeRectProps = {
     onContextMenu: (id: string, x: number, y: number) => void;
     onToggleCollapsed: (id: string) => void;
     onOpenLink: (id: string) => void;
+    onOpenMedia: (id: string) => void;
     collapsed: boolean;
     hiddenCount: number;
 };
@@ -30,6 +34,7 @@ export default function NodeRect({
     id,
     text,
     url,
+    media,
     x,
     y,
     selected,
@@ -42,11 +47,14 @@ export default function NodeRect({
     onContextMenu,
     onToggleCollapsed,
     onOpenLink,
+    onOpenMedia,
     collapsed,
     hiddenCount,
 }: NodeRectProps) {
     const needsTooltip = text.length > 60;
     const g = useNodeGestures({ id, selected, onSelect, onEditStart, onContextMenu });
+    const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
+    const showImage = media?.kind === "image" && media.src !== brokenSrc;
 
     return (
         <div
@@ -61,7 +69,7 @@ export default function NodeRect({
             }}
         >
             <div
-                className="node-rect"
+                className={`node-rect${media ? " node-rect--media" : ""}`}
                 title={needsTooltip ? text : undefined}
                 aria-label={text}
                 tabIndex={0}
@@ -84,10 +92,57 @@ export default function NodeRect({
                         onCancel={() => onCancelEdit(id)}
                     />
                 ) : (
-                    <span className="node-rect__text">{text}</span>
+                    <>
+                        <span className={`node-rect__text${media ? " node-rect__text--media" : ""}`}>{text}</span>
+                        {media && (
+                            <span className="node-rect__media" aria-hidden="true">
+                                {showImage ? (
+                                    <img
+                                        className="node-rect__img"
+                                        src={media.src}
+                                        alt=""
+                                        loading="lazy"
+                                        draggable={false}
+                                        onError={() => setBrokenSrc(media.src)}
+                                    />
+                                ) : (
+                                    <span className="node-rect__placeholder">
+                                        {media.kind === "video" ? (
+                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                                <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                                                <path d="M6.5 5.5v5l4-2.5-4-2.5z" fill="currentColor" />
+                                            </svg>
+                                        ) : (
+                                            <NodeMediaGlyph kind="image" size={16} />
+                                        )}
+                                    </span>
+                                )}
+                            </span>
+                        )}
+                    </>
                 )}
             </div>
             {url && <NodeLinkBadge text={text} url={url} onOpen={() => onOpenLink(id)} />}
+            {media && (
+                <button
+                    type="button"
+                    className="node-media"
+                    title={`${media.kind}: ${media.src}`}
+                    aria-label={`Open ${media.kind} for "${text}"`}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenMedia(id);
+                    }}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                >
+                    <NodeMediaGlyph kind={media.kind} />
+                </button>
+            )}
             {collapsed && hiddenCount > 0 && (
                 <button
                     type="button"

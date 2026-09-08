@@ -1,8 +1,8 @@
 // Radial tidy-tree layout - stateless, pure, no DOM.
 // Root centers at (0,0); branches grow toward N/E/S/W by Node.side.
 // Same-side siblings fan out across their side quadrant, weighted by
-// visible leaf count. Circles use NODE_DIAMETER; notes use NOTE_WIDTH
-// x NOTE_HEIGHT with bounding-circle clearance so mixed maps separate.
+// visible leaf count. Circles use NODE_DIAMETER; notes and media nodes use
+// NOTE_WIDTH x NOTE_HEIGHT with bounding-circle clearance so mixed maps separate.
 
 import type { Node, NodeKind, NodeSide } from "../types/node";
 import { isNodeSide } from "../types/node";
@@ -13,8 +13,14 @@ export const NOTE_HEIGHT = 104;
 export const GAP_X = 32;
 export const GAP_Y = 72;
 
+function hasMedia(node: Node | undefined): boolean {
+    const media = node?.media;
+    return typeof media === "object" && media !== null;
+}
+
 function kindOf(node: Node | undefined): NodeKind {
-    return node?.kind === "note" ? "note" : "circle";
+    if (node?.kind === "note" || hasMedia(node)) return "note";
+    return "circle";
 }
 
 // Bounding-circle radius per kind: circles use their radius, notes use

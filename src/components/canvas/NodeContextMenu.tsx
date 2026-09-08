@@ -1,6 +1,6 @@
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
-import type { NodeKind } from "../../types/node";
+import type { NodeKind, NodeMedia } from "../../types/node";
 
 export type NodeMenuState = { x: number; y: number; nodeId: string };
 
@@ -9,6 +9,7 @@ type NodeContextMenuProps = {
     text: string;
     kind: NodeKind;
     url: string | null;
+    media: NodeMedia | null;
     collapsed: boolean;
     hasChildren: boolean;
     isRoot: boolean;
@@ -18,6 +19,9 @@ type NodeContextMenuProps = {
     onEditLink: () => void;
     onOpenLink: () => void;
     onRemoveLink: () => void;
+    onEditMedia: () => void;
+    onOpenMedia: () => void;
+    onRemoveMedia: () => void;
     onToggleCollapse: () => void;
     onDelete: () => void;
 };
@@ -27,6 +31,7 @@ export default function NodeContextMenu({
     text,
     kind,
     url,
+    media,
     collapsed,
     hasChildren,
     isRoot,
@@ -36,6 +41,9 @@ export default function NodeContextMenu({
     onEditLink,
     onOpenLink,
     onRemoveLink,
+    onEditMedia,
+    onOpenMedia,
+    onRemoveMedia,
     onToggleCollapse,
     onDelete,
 }: NodeContextMenuProps) {
@@ -58,6 +66,17 @@ export default function NodeContextMenu({
             {url && (
                 <MenuItem onClick={onRemoveLink} aria-label={`Remove link for "${text}"`}>
                     Remove link
+                </MenuItem>
+            )}
+            <MenuItem onClick={onEditMedia} aria-label={`${media ? "Edit media" : "Add media"} for "${text}"`}>
+                {media ? "Edit media" : "Add media"}
+            </MenuItem>
+            <MenuItem onClick={onOpenMedia} disabled={!media} aria-label={`Open media for "${text}"`}>
+                Open media
+            </MenuItem>
+            {media && (
+                <MenuItem onClick={onRemoveMedia} aria-label={`Remove media for "${text}"`}>
+                    Remove media
                 </MenuItem>
             )}
             {kind === "note" ? (

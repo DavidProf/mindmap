@@ -13,6 +13,7 @@ type ExportPreviewDialogProps = {
     previewUrl: string | null;
     previewError: string | null;
     downloadError: string | null;
+    mediaWarning?: string | null;
     onClose: () => void;
     onDownload: () => void;
 };
@@ -23,6 +24,7 @@ export default function ExportPreviewDialog({
     previewUrl,
     previewError,
     downloadError,
+    mediaWarning,
     onClose,
     onDownload,
 }: ExportPreviewDialogProps) {
@@ -30,6 +32,23 @@ export default function ExportPreviewDialog({
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth aria-labelledby="export-preview-title">
             <DialogTitle id="export-preview-title">Export preview</DialogTitle>
             <DialogContent>
+                {mediaWarning && (
+                    <div
+                        data-testid="export-media-warning"
+                        role="status"
+                        style={{
+                            background: "var(--warning-bg, #fff8e1)",
+                            border: "1px solid var(--warning-border, #e6c200)",
+                            borderRadius: 8,
+                            padding: "8px 12px",
+                            marginBottom: 12,
+                            color: TOKENS.text,
+                            fontSize: 13,
+                        }}
+                    >
+                        {mediaWarning}
+                    </div>
+                )}
                 {previewError ? (
                     <div data-testid="export-preview-error" role="alert">
                         Could not render preview: {previewError}

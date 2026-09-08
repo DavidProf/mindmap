@@ -4,10 +4,18 @@
 // Keys: mindmap:projects + mindmap:nodes (documented choice per spec).
 
 import type { Project, Viewport } from "../types/project";
-import type { Node, NodeKind } from "../types/node";
-import { isNodeKind, MAX_URL_LENGTH, normalizeNodes, normalizeNodeUrlValue } from "../types/node";
+import type { Node, NodeKind, NodeMedia } from "../types/node";
+import {
+    isNodeKind,
+    isNodeMediaKind,
+    MAX_MEDIA_URL_LENGTH,
+    MAX_URL_LENGTH,
+    normalizeNodes,
+    normalizeNodeMediaValue,
+    normalizeNodeUrlValue,
+} from "../types/node";
 
-export { MAX_URL_LENGTH };
+export { MAX_MEDIA_URL_LENGTH, MAX_URL_LENGTH };
 
 const PROJECTS_KEY = "mindmap:projects";
 const NODES_KEY = "mindmap:nodes";
@@ -184,6 +192,21 @@ export function validateNodeUrlPure(raw: string | null | undefined): string | nu
 export function normalizeNodeUrlPure(raw: string | null | undefined): string | null {
     if (raw === null || raw === undefined) return null;
     return normalizeNodeUrlValue(raw);
+}
+
+export function validateNodeMediaPure(kind: unknown, src: unknown): string | null {
+    if (src === null || src === undefined) return null;
+    if (typeof src === "string" && src.trim().length === 0) return null;
+    if (!isNodeMediaKind(kind)) return "Choose image or video.";
+    if (typeof src !== "string") return "Enter a valid http(s) URL.";
+    const trimmed = src.trim();
+    if (trimmed.length > MAX_MEDIA_URL_LENGTH) return `Media URL must be ${MAX_MEDIA_URL_LENGTH} characters or less.`;
+    if (normalizeNodeUrlValue(trimmed) === null) return "Enter a valid http(s) URL.";
+    return null;
+}
+
+export function normalizeNodeMediaPure(value: unknown): NodeMedia | null {
+    return normalizeNodeMediaValue(value);
 }
 
 export function bumpedIso(prevUpdated: string): string {

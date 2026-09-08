@@ -10,24 +10,33 @@ import {
     isNameUniquePure,
     loadNodes,
     loadProjects,
+    MAX_MEDIA_URL_LENGTH,
     MAX_NOTE_TEXT_LENGTH,
     MAX_URL_LENGTH,
     maxTextLengthForKind,
+    normalizeNodeMediaPure,
     normalizeNodeUrlPure,
     saveNodes,
     saveProjects,
+    validateNodeMediaPure,
     validateNodeTextPure,
     validateNodeUrlPure,
     validateProjectNamePure,
 } from "./localStore";
-import { isNodeKind, normalizeNodeKind, normalizeNodes, normalizeNodeUrlValue } from "../types/node";
+import {
+    isNodeKind,
+    normalizeNodeKind,
+    normalizeNodeMediaValue,
+    normalizeNodes,
+    normalizeNodeUrlValue,
+} from "../types/node";
 import type { Project, Viewport } from "../types/project";
 import type { Node } from "../types/node";
 
 const STAMP = "2026-01-01T00:00:00.000Z";
 
 function node(id: string, projectId: string, parentId: string | null): Node {
-    return { id, projectId, parentId, text: id, kind: "circle", url: null, side: "south", collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+    return { id, projectId, parentId, text: id, kind: "circle", url: null, media: null, side: "south", collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 function project(id: string, name: string, viewport: Viewport = { x: 0, y: 0, zoom: 1 }): Project {
@@ -214,6 +223,74 @@ describe("node url (13b)", () => {
         const linked = { ...node("n1", "p1", null), url: "https://example.com/" };
         saveNodes([linked]);
         expect(loadNodes()).toEqual([linked]);
+    });
+});
+
+describe("node media (13c)", () => {
+    it("accepts null and empty as clear", () => {
+        expect(validateNodeMediaPure(null, null)).toBeNull();
+        expect(validateNodeMediaPure("image", null)).toBeNull();
+        expect(validateNodeMediaPure("image", undefined)).toBeNull();
+        expect(validateNodeMediaPure("image", "   ")).toBeNull();
+        expect(normalizeNodeMediaPure(null)).toBeNull();
+        expect(normalizeNodeMediaPure(undefined)).toBeNull();
+    });
+    it("accepts image and video http urls", () => {
+        expect(validateNodeMediaPure("image", "https://example.com/a.png")).toBeNull();
+        expect(validateNodeMediaPure("video", "https://example.com/v.mp4")).toBeNull();
+        expect(normalizeNodeMediaPure({ kind: "image", src: "https://example.com/a.png" })).toEqual({
+            kind: "image",
+            src: "https://example.com/a.png",
+        });
+    });
+    it("prepends https for bare domains", () => {
+        expect(validateNodeMediaPure("video", "example.com/v")).toBeNull();
+        expect(normalizeNodeMediaPure({ kind: "video", src: "example.com/v" })).toEqual({
+            kind: "video",
+            src: "https://example.com/v",
+        });
+    });
+    it("rejects bad kinds and dangerous schemes", () => {
+        expect(validateNodeMediaPure("audio", "https://example.com/a.mp3")).toBe("Choose image or video.");
+        expect(validateNodeMediaPure("image", "javascript:alert(1)")).toBe("Enter a valid http(s) URL.");
+        expect(validateNodeMediaPure("video", "data:text/plain,hi")).toBe("Enter a valid http(s) URL.");
+        expect(validateNodeMediaPure("image", "ftp://example.com/a.png")).toBe("Enter a valid http(s) URL.");
+        expect(normalizeNodeMediaValue({ kind: "image", src: "javascript:alert(1)" })).toBeNull();
+        expect(normalizeNodeMediaValue({ kind: "photo", src: "https://example.com/a.png" })).toBeNull();
+    });
+    it("rejects whitespace and over-length src", () => {
+        expect(validateNodeMediaPure("image", "not a url")).toBe("Enter a valid http(s) URL.");
+        expect(normalizeNodeMediaValue({ kind: "video", src: "not a url" })).toBeNull();
+        const long = `https://example.com/${"x".repeat(MAX_MEDIA_URL_LENGTH)}`;
+        expect(validateNodeMediaPure("image", long)).toBe(
+            `Media URL must be ${MAX_MEDIA_URL_LENGTH} characters or less.`,
+        );
+        expect(normalizeNodeMediaValue({ kind: "image", src: long })).toBeNull();
+    });
+    it("normalizes legacy nodes missing media to null", () => {
+        const legacy = { ...node("r1", "p1", null), media: undefined as unknown as null };
+        const out = normalizeNodes([legacy as unknown as Node]);
+        expect(out[0].media).toBeNull();
+    });
+    it("normalizes invalid stored media to null and keeps valid media", () => {
+        const bad = { ...node("a", "p1", null), media: { kind: "image", src: "javascript:alert(1)" } };
+        const good = {
+            ...node("b", "p1", null),
+            media: { kind: "video" as const, src: "https://example.com/v" },
+        };
+        const out = normalizeNodes([bad as unknown as Node, good]);
+        expect(out[0].media).toBeNull();
+        expect(out[1].media).toEqual({ kind: "video", src: "https://example.com/v" });
+    });
+    it("round-trips media through storage", () => {
+        __resetForTests();
+        stubWindow();
+        const withMedia = {
+            ...node("n1", "p1", null),
+            media: { kind: "image" as const, src: "https://example.com/a.png" },
+        };
+        saveNodes([withMedia]);
+        expect(loadNodes()).toEqual([withMedia]);
     });
 });
 

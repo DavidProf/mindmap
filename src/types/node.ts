@@ -42,6 +42,28 @@ export function normalizeNodeUrlValue(value: unknown): string | null {
     return href;
 }
 
+export const NODE_MEDIA_KINDS = ["image", "video"] as const;
+
+export type NodeMediaKind = (typeof NODE_MEDIA_KINDS)[number];
+
+export function isNodeMediaKind(value: unknown): value is NodeMediaKind {
+    return typeof value === "string" && (NODE_MEDIA_KINDS as readonly string[]).includes(value);
+}
+
+export type NodeMedia = { kind: NodeMediaKind; src: string };
+
+export const MAX_MEDIA_URL_LENGTH = MAX_URL_LENGTH;
+
+export function normalizeNodeMediaValue(value: unknown): NodeMedia | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+    if (!isNodeMediaKind(record.kind)) return null;
+    const src = normalizeNodeUrlValue(record.src);
+    if (src === null) return null;
+    return { kind: record.kind, src };
+}
+
 export type Node = {
     id: string;
     projectId: string;
@@ -49,6 +71,7 @@ export type Node = {
     text: string;
     kind: NodeKind;
     url: string | null;
+    media: NodeMedia | null;
     side: NodeSide | null;
     collapsed: boolean;
     createdAt: string;
@@ -62,9 +85,21 @@ export function normalizeNodes(nodes: Node[]): Node[] {
         const rawUrl = (n as unknown as Record<string, unknown>).url;
         const wantUrl = normalizeNodeUrlValue(rawUrl);
         const hasUrlField = Object.prototype.hasOwnProperty.call(n, "url");
-        if (wantKind === n.kind && hasUrlField && (n as Node).url === wantUrl) return n;
+        const rawMedia = (n as unknown as Record<string, unknown>).media;
+        const wantMedia = normalizeNodeMediaValue(rawMedia);
+        const hasMediaField = Object.prototype.hasOwnProperty.call(n, "media");
+        const prevMedia = (n as Node).media;
+        const mediaSame =
+            wantMedia === null
+                ? prevMedia === null
+                : prevMedia !== null &&
+                  prevMedia !== undefined &&
+                  prevMedia.kind === wantMedia.kind &&
+                  prevMedia.src === wantMedia.src;
+        if (wantKind === n.kind && hasUrlField && (n as Node).url === wantUrl && hasMediaField && mediaSame)
+            return n;
         changed = true;
-        return { ...n, kind: wantKind, url: wantUrl };
+        return { ...n, kind: wantKind, url: wantUrl, media: wantMedia };
     });
     return changed ? out : nodes;
 }

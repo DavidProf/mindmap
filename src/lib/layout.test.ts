@@ -5,7 +5,7 @@ import type { Node, NodeKind, NodeSide } from "../types/node";
 const STAMP = "2026-01-01T00:00:00.000Z";
 
 function node(id: string, parentId: string | null, side: NodeSide | null = "south", kind: NodeKind = "circle"): Node {
-    return { id, projectId: "p", parentId, text: id, kind, url: null, side, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+    return { id, projectId: "p", parentId, text: id, kind, url: null, media: null, side, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 function dist(a: { x: number; y: number }, b: { x: number; y: number }): number {
@@ -240,6 +240,24 @@ describe("computeLayout", () => {
     it("pads bounds by note half-extents", () => {
         const nodes = [node("root", null), node("child", "root", "east", "note")];
         const { bounds } = computeLayout(nodes, "root");
+        expect(bounds.width).toBeGreaterThanOrEqual(NOTE_WIDTH);
+        expect(bounds.height).toBeGreaterThanOrEqual(NOTE_HEIGHT);
+    });
+
+    it("treats circle nodes with media as note footprints", () => {
+        const plain = node("plain", "root", "west");
+        const withMedia: Node = {
+            ...node("framed", "root", "east"),
+            media: { kind: "image", src: "https://example.com/a.png" },
+        };
+        const { positions, bounds } = computeLayout([node("root", null), plain, withMedia], "root");
+        const framed = positions.get("framed")!;
+        const other = positions.get("plain")!;
+        const root = positions.get("root")!;
+        const noteR = nodeRadius("note");
+        const circleR = nodeRadius("circle");
+        expect(Math.hypot(framed.x - root.x, framed.y - root.y)).toBeGreaterThanOrEqual(noteR + circleR - 1e-6);
+        expect(Math.hypot(framed.x - other.x, framed.y - other.y)).toBeGreaterThanOrEqual(noteR + circleR - 1e-6);
         expect(bounds.width).toBeGreaterThanOrEqual(NOTE_WIDTH);
         expect(bounds.height).toBeGreaterThanOrEqual(NOTE_HEIGHT);
     });

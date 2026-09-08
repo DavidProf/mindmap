@@ -2,13 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
     buildExportFilename,
     EXPORT_PADDING,
+    hasDrawableImage,
     linkBadgeCenterPure,
+    mediaBadgeCenterPure,
+    mediaWellForExport,
     NOTE_MAX_CHARS_PER_LINE,
     NOTE_MAX_LINES,
     noteRectForExport,
     paddedExportBounds,
     resolveExportScale,
     shouldDrawLinkBadge,
+    shouldDrawMediaBadge,
+    wrapExportTextPure,
     wrapLinesPure,
     wrapNoteLinesPure,
 } from "./exportPng";
@@ -150,5 +155,58 @@ describe("link export indicator (13b)", () => {
         const small = linkBadgeCenterPure(0, 0, 1, "circle");
         const large = linkBadgeCenterPure(0, 0, 2, "circle");
         expect(large.radius).toBe(small.radius * 2);
+    });
+});
+
+describe("media export indicator (13c)", () => {
+    it("draws a badge only for image or video media", () => {
+        expect(shouldDrawMediaBadge(null)).toBe(false);
+        expect(shouldDrawMediaBadge(undefined)).toBe(false);
+        expect(shouldDrawMediaBadge("https://example.com/a.png")).toBe(false);
+        expect(shouldDrawMediaBadge({ kind: "audio", src: "https://example.com/a.mp3" })).toBe(false);
+        expect(shouldDrawMediaBadge({ kind: "image", src: "https://example.com/a.png" })).toBe(true);
+        expect(shouldDrawMediaBadge({ kind: "video", src: "https://example.com/v.mp4" })).toBe(true);
+    });
+    it("places the badge inside the note rect bounds", () => {
+        const badge = mediaBadgeCenterPure(100, 100, 2);
+        const rect = noteRectForExport(100, 100, 2);
+        expect(badge.radius).toBeGreaterThan(0);
+        expect(badge.x).toBeGreaterThan(rect.x);
+        expect(badge.x).toBeLessThan(rect.x + rect.width);
+        expect(badge.y).toBeGreaterThan(rect.y);
+        expect(badge.y).toBeLessThan(rect.y + rect.height);
+    });
+    it("scales the badge with the export scale", () => {
+        const small = mediaBadgeCenterPure(0, 0, 1);
+        const large = mediaBadgeCenterPure(0, 0, 2);
+        expect(large.radius).toBe(small.radius * 2);
+    });
+    it("keeps the photo well inside the note rect", () => {
+        const well = mediaWellForExport(100, 50, 2);
+        const rect = noteRectForExport(100, 50, 2);
+        expect(well.x).toBeGreaterThan(rect.x);
+        expect(well.x + well.width).toBeLessThan(rect.x + rect.width);
+        expect(well.y).toBeGreaterThan(50);
+        expect(well.y + well.height).toBeLessThan(rect.y + rect.height);
+        expect(well.height).toBeGreaterThan(0);
+    });
+});
+
+describe("photo export guards (13c/F-01, F-03)", () => {
+    const longNote =
+        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau";
+    it("caps photo node text to 3 lines and keeps full wrap otherwise", () => {
+        const photo = wrapExportTextPure(longNote, true, true);
+        expect(photo.length).toBeLessThanOrEqual(3);
+        expect(wrapExportTextPure(longNote, true, false).length).toBeGreaterThan(3);
+        expect(wrapExportTextPure("hi", false, false)).toEqual(["hi"]);
+        expect(wrapExportTextPure("hi", false, true)).toEqual(["hi"]);
+    });
+    it("treats only positive-dimension images as drawable", () => {
+        expect(hasDrawableImage(null)).toBe(false);
+        expect(hasDrawableImage(undefined)).toBe(false);
+        expect(hasDrawableImage({ naturalWidth: 0, naturalHeight: 100 })).toBe(false);
+        expect(hasDrawableImage({ naturalWidth: 100, naturalHeight: 0 })).toBe(false);
+        expect(hasDrawableImage({ naturalWidth: 100, naturalHeight: 50 })).toBe(true);
     });
 });

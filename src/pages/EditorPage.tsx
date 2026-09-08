@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Alert } from "@mui/material";
 import AppHeader from "../components/layout/AppHeader";
@@ -12,14 +12,16 @@ import {
     isQuotaError,
     setNodeCollapsedAsync,
     setNodeKindAsync,
+    setNodeMediaAsync,
     setNodeUrlAsync,
     updateNodeTextAsync,
 } from "../storage/operations";
 import type { StorageBackend } from "../storage/backend";
 import { computeLayout } from "../lib/layout";
 import { exportMapAsPng, paddedExportBounds, renderMapToCanvas, resolveExportScale } from "../lib/exportPng";
+import { loadExportMediaImages, mediaLoadWarningPure } from "../lib/media";
 import type { Project, Viewport } from "../types/project";
-import type { Node, NodeKind, NodeSide } from "../types/node";
+import type { Node, NodeKind, NodeMedia, NodeSide } from "../types/node";
 import "./EditorPage.css";
 
 export default function EditorPage() {
@@ -97,6 +99,8 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [previewError, setPreviewError] = useState<string | null>(null);
     const [downloadError, setDownloadError] = useState<string | null>(null);
+    const [mediaWarning, setMediaWarning] = useState<string | null>(null);
+    const exportTokenRef = useRef(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -180,6 +184,18 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         }
     }
 
+    async function handleSetMedia(nodeId: string, media: NodeMedia | null): Promise<Node | null> {
+        try {
+            const updated = await setNodeMediaAsync(backend, nodeId, media);
+            await refreshNodes();
+            setError(null);
+            return updated;
+        } catch (e) {
+            setError(toEditorError(e, "Could not save media."));
+            return null;
+        }
+    }
+
     async function handleToggleCollapsed(nodeId: string): Promise<Node | null> {
         if (nodes === null) return null;
         try {
@@ -239,33 +255,50 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
     const layout = computeLayout(nodes, project.rootNodeId);
     const visibleNodes = nodes.filter((n) => layout.positions.has(n.id));
 
-    function handleExport() {
+    function mediaWarningFor(failedIds: string[], lookup: Node[]): string | null {
+        const names = failedIds.map((id) => {
+            const text = lookup.find((n) => n.id === id)?.text.trim() ?? "";
+            return text.length > 24 ? `${text.slice(0, 24)}…` : text || "Untitled node";
+        });
+        return mediaLoadWarningPure(names);
+    }
+
+    async function handleExport() {
+        const token = ++exportTokenRef.current;
         setPreviewUrl(null);
         setPreviewError(null);
         setDownloadError(null);
+        setMediaWarning(null);
+        setPreviewOpen(true);
         try {
             const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
             const scale = resolveExportScale(paddedExportBounds(layout.bounds), dpr);
+            const loaded = await loadExportMediaImages(visibleNodes);
+            if (token !== exportTokenRef.current) return;
             const canvas = renderMapToCanvas({
                 nodes: visibleNodes,
                 positions: layout.positions,
                 edges: layout.edges,
                 bounds: layout.bounds,
                 scale,
+                images: loaded.images,
             });
             setPreviewUrl(canvas.toDataURL("image/png"));
+            setMediaWarning(mediaWarningFor(loaded.failedIds, visibleNodes));
         } catch (e) {
+            if (token !== exportTokenRef.current) return;
             const message = e instanceof Error ? e.message : "Could not render preview.";
             setPreviewError(message);
             setError(message);
         }
-        setPreviewOpen(true);
     }
 
     function handleClosePreview() {
         if (exporting) return;
+        exportTokenRef.current++;
         setPreviewOpen(false);
         setPreviewUrl(null);
+        setMediaWarning(null);
     }
 
     async function handleConfirmDownload() {
@@ -273,15 +306,20 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         setExporting(true);
         setDownloadError(null);
         try {
+            const loaded = await loadExportMediaImages(visibleNodes);
             await exportMapAsPng({
                 projectName: project.name,
                 nodes: visibleNodes,
                 positions: layout.positions,
                 edges: layout.edges,
                 bounds: layout.bounds,
+                images: loaded.images,
             });
             setError(null);
-            setPreviewOpen(false);
+            const warning = mediaWarningFor(loaded.failedIds, visibleNodes);
+            setMediaWarning(warning);
+            // Keep the dialog open when images failed so the warning is seen.
+            if (warning === null) setPreviewOpen(false);
         } catch (e) {
             const message = e instanceof Error ? e.message : "Could not export PNG.";
             setDownloadError(message);
@@ -340,6 +378,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
                     onUpdateText={handleUpdateText}
                     onSetKind={handleSetKind}
                     onSetUrl={handleSetUrl}
+                    onSetMedia={handleSetMedia}
                     onToggleCollapsed={handleToggleCollapsed}
                     onDeleteSubtree={handleDeleteSubtree}
                 />
@@ -349,6 +388,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
                     previewUrl={previewUrl}
                     previewError={previewError}
                     downloadError={downloadError}
+                    mediaWarning={mediaWarning}
                     onClose={handleClosePreview}
                     onDownload={() => void handleConfirmDownload()}
                 />
