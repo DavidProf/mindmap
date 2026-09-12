@@ -4,9 +4,10 @@ import NodeMediaGlyph from "./NodeMediaGlyph";
 type NodeUploadedImageProps = {
     uploadId: string;
     loadBlob: (uploadId: string) => Promise<Blob | null>;
+    fill?: boolean;
 };
 
-export default function NodeUploadedImage({ uploadId, loadBlob }: NodeUploadedImageProps) {
+export default function NodeUploadedImage({ uploadId, loadBlob, fill = false }: NodeUploadedImageProps) {
     const [objectUrl, setObjectUrl] = useState<string | null>(null);
 
     useEffect(() => {
@@ -29,7 +30,7 @@ export default function NodeUploadedImage({ uploadId, loadBlob }: NodeUploadedIm
     }, [uploadId, loadBlob]);
 
     return (
-        <span className="node-rect__media" aria-hidden="true">
+        <span className={`node-rect__media${fill ? " node-rect__media--fill" : ""}`} aria-hidden="true">
             {objectUrl ? (
                 <img
                     className="node-rect__img"

@@ -1,6 +1,7 @@
 import { NODE_DIAMETER, NOTE_HEIGHT, NOTE_WIDTH } from "./layout";
 import { TOKENS } from "../theme/tokens";
 import { youtubeShortlinkPure } from "./media";
+import { isMediaFilledPure } from "../types/node";
 import type { Node, NodeMedia } from "../types/node";
 
 export const EXPORT_PADDING = 48;
@@ -112,6 +113,17 @@ export function wrapNoteLinesPure(text: string): string[] {
 export function wrapExportTextPure(text: string, isNote: boolean, showPhoto: boolean): string[] {
     if (showPhoto) return wrapLinesPure(text, NOTE_MAX_CHARS_PER_LINE, 3);
     return isNote ? wrapNoteLinesPure(text) : wrapLinesPure(text);
+}
+
+// Cover-fit for full-bleed nodes: scale to fill, crop the overflow, center.
+export function coverFitPure(
+    iw: number,
+    ih: number,
+    w: number,
+    h: number,
+): { dw: number; dh: number } {
+    const fit = Math.max(w / iw, h / ih);
+    return { dw: iw * fit, dh: ih * fit };
 }
 
 export function hasDrawableImage(image: { naturalWidth: number; naturalHeight: number } | null | undefined): boolean {
@@ -304,13 +316,27 @@ export function renderMapToCanvas(args: {
 
         const loadedImage = images.get(node.id) ?? null;
         const showPhoto = isNote && hasDrawableImage(loadedImage);
-        if (showPhoto && loadedImage) {
+        const filled = isNote && isMediaFilledPure(node);
+        if (showPhoto && loadedImage && filled) {
+            // Full-bleed: the image covers the whole node, no text, no well.
+            const rect = noteRectForExport(cx, cy, scale);
+            const iw = loadedImage.naturalWidth;
+            const ih = loadedImage.naturalHeight;
+            const { dw, dh } = coverFitPure(iw, ih, rect.width, rect.height);
+            ctx.save();
+            traceRoundRect(ctx, rect.x, rect.y, rect.width, rect.height, NOTE_CORNER_RADIUS * scale);
+            ctx.clip();
+            ctx.drawImage(loadedImage, rect.x + (rect.width - dw) / 2, rect.y + (rect.height - dh) / 2, dw, dh);
+            ctx.restore();
+            traceRoundRect(ctx, rect.x, rect.y, rect.width, rect.height, NOTE_CORNER_RADIUS * scale);
+            ctx.strokeStyle = EXPORT_NODE_STROKE;
+            ctx.lineWidth = 1 * scale;
+            ctx.stroke();
+        } else if (showPhoto && loadedImage) {
             const well = mediaWellForExport(cx, cy, scale);
             const iw = loadedImage.naturalWidth;
             const ih = loadedImage.naturalHeight;
-            const fit = Math.max(well.width / iw, well.height / ih);
-            const dw = iw * fit;
-            const dh = ih * fit;
+            const { dw, dh } = coverFitPure(iw, ih, well.width, well.height);
             ctx.save();
             traceRoundRect(ctx, well.x, well.y, well.width, well.height, 6 * scale);
             ctx.clip();
@@ -321,7 +347,10 @@ export function renderMapToCanvas(args: {
             ctx.lineWidth = 1 * scale;
             ctx.stroke();
         }
-        const lines = wrapExportTextPure(node.text, isNote, showPhoto);
+        // Filled nodes hide their text; a failed image load falls back to text
+        // plus the badge placeholder so the node stays readable on paper.
+        const hideText = filled && (showPhoto || node.media?.kind === "video");
+        const lines = hideText ? [] : wrapExportTextPure(node.text, isNote, showPhoto);
         if (lines.length > 0) {
             ctx.fillStyle = EXPORT_TEXT_COLOR;
             const lineHeight = fontSize * 1.2;

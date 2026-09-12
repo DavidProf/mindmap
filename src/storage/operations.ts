@@ -75,6 +75,7 @@ export async function createProjectAsync(backend: StorageBackend, name: string):
         kind: "circle",
         url: null,
         media: null,
+        mediaFill: true,
         side: null,
         collapsed: false,
         createdAt: now,
@@ -156,6 +157,7 @@ export async function addChildNodeAsync(
         kind,
         url: null,
         media: null,
+        mediaFill: true,
         side,
         collapsed: false,
         createdAt: now,
@@ -271,7 +273,30 @@ export async function setNodeMediaAsync(
             (nextMedia.uploadId ?? null) === (prevMedia.uploadId ?? null));
     if (same) return nodes[idx];
 
-    const updated: Node = { ...nodes[idx], media: nextMedia, updatedAt: bumpedIso(nodes[idx].updatedAt) };
+    // Attaching media or clearing it resets fill to the default; editing keeps the choice.
+    const nextMediaFill = nextMedia !== null && prevMedia !== null ? nodes[idx].mediaFill : true;
+    const updated: Node = { ...nodes[idx], media: nextMedia, mediaFill: nextMediaFill, updatedAt: bumpedIso(nodes[idx].updatedAt) };
+    nodes[idx] = updated;
+    await backend.saveNodes(nodes);
+
+    const projects = await backend.loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
+    if (pIdx !== -1) {
+        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+        await backend.saveProjects(projects);
+        mirrorToLocalStorage(projects, nodes);
+    }
+    return updated;
+}
+
+export async function setNodeMediaFillAsync(backend: StorageBackend, nodeId: string, fill: boolean): Promise<Node> {
+    const nodes = normalizeNodes(await backend.loadNodes());
+    const idx = nodes.findIndex((n) => n.id === nodeId);
+    if (idx === -1) throw new Error("Node not found.");
+    if (nodes[idx].media === null) throw new Error("Attach media before filling the node.");
+    if (nodes[idx].mediaFill === fill) return nodes[idx];
+
+    const updated: Node = { ...nodes[idx], mediaFill: fill, updatedAt: bumpedIso(nodes[idx].updatedAt) };
     nodes[idx] = updated;
     await backend.saveNodes(nodes);
 

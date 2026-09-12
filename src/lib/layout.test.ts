@@ -5,7 +5,7 @@ import type { Node, NodeKind, NodeSide } from "../types/node";
 const STAMP = "2026-01-01T00:00:00.000Z";
 
 function node(id: string, parentId: string | null, side: NodeSide | null = "south", kind: NodeKind = "circle"): Node {
-    return { id, projectId: "p", parentId, text: id, kind, url: null, media: null, side, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+    return { id, projectId: "p", parentId, text: id, kind, url: null, media: null, mediaFill: true, side, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 function dist(a: { x: number; y: number }, b: { x: number; y: number }): number {

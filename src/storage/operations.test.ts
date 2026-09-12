@@ -12,6 +12,7 @@ import {
     setNodeCollapsedAsync,
     setNodeKindAsync,
     setNodeMediaAsync,
+    setNodeMediaFillAsync,
     setNodeUrlAsync,
     setViewportAsync,
     updateNodeTextAsync,
@@ -325,6 +326,38 @@ describe("node url (13b)", () => {
         expect(Date.parse(after) >= Date.parse(before)).toBe(true);
         const cleared = await setNodeMediaAsync(backend, child.id, null);
         expect(cleared.media).toBeNull();
+    });
+    it("resets mediaFill to true on attach and clear, keeps it on edit (13e)", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const attached = await setNodeMediaAsync(backend, child.id, { kind: "image", src: "https://example.com/a.png", uploadId: null });
+        expect(attached.mediaFill).toBe(true);
+        // Simulate a stored fill-off choice, then edit the media in place.
+        const all = await backend.loadNodes();
+        await backend.saveNodes(all.map((n) => (n.id === child.id ? { ...n, mediaFill: false } : n)));
+        const edited = await setNodeMediaAsync(backend, child.id, { kind: "image", src: "https://example.com/b.png", uploadId: null });
+        expect(edited.media?.src).toBe("https://example.com/b.png");
+        expect(edited.mediaFill).toBe(false);
+        const cleared = await setNodeMediaAsync(backend, child.id, null);
+        expect(cleared.media).toBeNull();
+        expect(cleared.mediaFill).toBe(true);
+    });
+    it("toggles media fill only on nodes with media (13e)", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        await expect(setNodeMediaFillAsync(backend, child.id, false)).rejects.toThrow("Attach media before filling the node.");
+        await expect(setNodeMediaFillAsync(backend, "missing", false)).rejects.toThrow("Node not found.");
+        await setNodeMediaAsync(backend, child.id, { kind: "image", src: "https://example.com/a.png", uploadId: null });
+        const off = await setNodeMediaFillAsync(backend, child.id, false);
+        expect(off.mediaFill).toBe(false);
+        const stored = (await backend.loadNodes()).find((n) => n.id === child.id)!;
+        expect(stored.mediaFill).toBe(false);
+        const again = await setNodeMediaFillAsync(backend, child.id, false);
+        expect(again).toBe(off);
+        const on = await setNodeMediaFillAsync(backend, child.id, true);
+        expect(on.mediaFill).toBe(true);
     });
     it("rejects invalid media and unknown nodes", async () => {
         const backend = createMemoryBackend();

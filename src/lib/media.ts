@@ -90,6 +90,25 @@ export function mediaLoadWarningPure(names: string[]): string | null {
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"]);
 const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{6,}$/;
 
+const DIRECT_VIDEO_EXT_RE = /\.(mp4|webm|ogv|ogg|mov|m4v)(\?|#|$)/i;
+
+export type InlineVideoKind = "direct" | "youtube";
+
+// What inline playback can handle, if anything; null keeps open-in-new-tab.
+export function inlineVideoKindPure(src: unknown): InlineVideoKind | null {
+    if (typeof src !== "string") return null;
+    const trimmed = src.trim();
+    if (trimmed.length === 0) return null;
+    if (DIRECT_VIDEO_EXT_RE.test(trimmed)) return "direct";
+    if (youtubeVideoIdPure(trimmed) !== null) return "youtube";
+    return null;
+}
+
+export function youtubeEmbedUrlPure(src: string): string | null {
+    const id = youtubeVideoIdPure(src);
+    return id === null ? null : `https://www.youtube-nocookie.com/embed/${id}?autoplay=1`;
+}
+
 export function youtubeVideoIdPure(src: unknown): string | null {
     if (typeof src !== "string") return null;
     let parsed: URL;

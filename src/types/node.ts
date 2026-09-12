@@ -81,11 +81,22 @@ export type Node = {
     kind: NodeKind;
     url: string | null;
     media: NodeMedia | null;
+    mediaFill: boolean;
     side: NodeSide | null;
     collapsed: boolean;
     createdAt: string;
     updatedAt: string;
 };
+
+// Fill only means something while media is attached; default on per 13e.
+export function normalizeNodeMediaFill(value: unknown, hasMedia: boolean): boolean {
+    return hasMedia && typeof value === "boolean" ? value : true;
+}
+
+// One rule for canvas and export so the two cannot drift.
+export function isMediaFilledPure(node: Pick<Node, "media" | "mediaFill">): boolean {
+    return node.media !== null && node.mediaFill;
+}
 
 export function normalizeNodes(nodes: Node[]): Node[] {
     let changed = false;
@@ -97,6 +108,7 @@ export function normalizeNodes(nodes: Node[]): Node[] {
         const rawMedia = (n as unknown as Record<string, unknown>).media;
         const wantMedia = normalizeNodeMediaValue(rawMedia);
         const hasMediaField = Object.prototype.hasOwnProperty.call(n, "media");
+        const wantMediaFill = normalizeNodeMediaFill((n as unknown as Record<string, unknown>).mediaFill, wantMedia !== null);
         const prevMedia = (n as Node).media;
         const prevUploadId = prevMedia?.uploadId ?? null;
         const wantUploadId = wantMedia?.uploadId ?? null;
@@ -108,10 +120,10 @@ export function normalizeNodes(nodes: Node[]): Node[] {
                   prevMedia.kind === wantMedia.kind &&
                   prevMedia.src === wantMedia.src &&
                   prevUploadId === wantUploadId;
-        if (wantKind === n.kind && hasUrlField && (n as Node).url === wantUrl && hasMediaField && mediaSame)
+        if (wantKind === n.kind && hasUrlField && (n as Node).url === wantUrl && hasMediaField && mediaSame && n.mediaFill === wantMediaFill)
             return n;
         changed = true;
-        return { ...n, kind: wantKind, url: wantUrl, media: wantMedia };
+        return { ...n, kind: wantKind, url: wantUrl, media: wantMedia, mediaFill: wantMediaFill };
     });
     return changed ? out : nodes;
 }

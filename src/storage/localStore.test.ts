@@ -28,6 +28,7 @@ import {
 } from "./localStore";
 import {
     isNodeKind,
+    isMediaFilledPure,
     normalizeNodeKind,
     normalizeNodeMediaValue,
     normalizeNodes,
@@ -39,7 +40,7 @@ import type { Node } from "../types/node";
 const STAMP = "2026-01-01T00:00:00.000Z";
 
 function node(id: string, projectId: string, parentId: string | null): Node {
-    return { id, projectId, parentId, text: id, kind: "circle", url: null, media: null, side: "south", collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+    return { id, projectId, parentId, text: id, kind: "circle", url: null, media: null, mediaFill: true, side: "south", collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 function project(id: string, name: string, viewport: Viewport = { x: 0, y: 0, zoom: 1 }): Project {
@@ -316,6 +317,62 @@ describe("node upload media (13d)", () => {
     it("coerces missing uploadId to null without rewriting url media", () => {
         const urlMedia = { ...node("u", "p1", null), media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null } };
         expect(normalizeNodes([urlMedia])[0]).toBe(urlMedia);
+    });
+});
+
+describe("node media fill (13e)", () => {
+    it("fills only when media is attached and fill is on", () => {
+        const media = { kind: "image" as const, src: "https://example.com/a.png", uploadId: null };
+        expect(isMediaFilledPure({ media, mediaFill: true })).toBe(true);
+        expect(isMediaFilledPure({ media, mediaFill: false })).toBe(false);
+        expect(isMediaFilledPure({ media: null, mediaFill: true })).toBe(false);
+    });
+    it("normalizes missing mediaFill to true, with or without media", () => {
+        const bare = { ...node("a", "p1", null), mediaFill: undefined as unknown as boolean };
+        const withMedia = {
+            ...node("b", "p1", null),
+            media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null },
+            mediaFill: undefined as unknown as boolean,
+        };
+        const out = normalizeNodes([bare as unknown as Node, withMedia as unknown as Node]);
+        expect(out[0].mediaFill).toBe(true);
+        expect(out[1].mediaFill).toBe(true);
+    });
+    it("keeps explicit false only while media is attached", () => {
+        const filled = {
+            ...node("a", "p1", null),
+            media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null },
+            mediaFill: false,
+        };
+        const cleared = { ...node("b", "p1", null), media: null, mediaFill: false };
+        const bad = {
+            ...node("c", "p1", null),
+            media: { kind: "video" as const, src: "https://example.com/v", uploadId: null },
+            mediaFill: "no" as unknown as boolean,
+        };
+        const out = normalizeNodes([filled, cleared, bad]);
+        expect(out[0].mediaFill).toBe(false);
+        expect(out[1].mediaFill).toBe(true);
+        expect(out[2].mediaFill).toBe(true);
+    });
+    it("leaves already-normalized nodes untouched", () => {
+        const kept = {
+            ...node("a", "p1", null),
+            media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null },
+            mediaFill: false,
+        };
+        expect(normalizeNodes([kept])[0]).toBe(kept);
+    });
+    it("round-trips mediaFill false through storage", () => {
+        __resetForTests();
+        stubWindow();
+        const off = {
+            ...node("n1", "p1", null),
+            media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null },
+            mediaFill: false,
+        };
+        saveNodes([off]);
+        expect(loadNodes()).toEqual([off]);
     });
 });
 

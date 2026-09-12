@@ -37,6 +37,7 @@ type TreeCanvasProps = {
     onSetKind?: (nodeId: string, kind: NodeKind, opts?: { allowTruncate?: boolean }) => Promise<Node | null>;
     onSetUrl?: (nodeId: string, url: string | null) => Promise<Node | null>;
     onSetMedia?: (nodeId: string, media: NodeMedia | null) => Promise<Node | null>;
+    onSetMediaFill?: (nodeId: string, fill: boolean) => Promise<Node | null>;
     onUploadMedia?: (nodeId: string, file: File) => Promise<string | null>;
     loadBlob?: (uploadId: string) => Promise<Blob | null>;
     canUpload?: boolean;
@@ -44,7 +45,7 @@ type TreeCanvasProps = {
     onDeleteSubtree?: (nodeId: string) => Promise<{ deletedIds: string[] } | null>;
 };
 
-export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onSetUrl, onSetMedia, onUploadMedia, loadBlob, canUpload, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
+export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onSetUrl, onSetMedia, onSetMediaFill, onUploadMedia, loadBlob, canUpload, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const uploadInputRef = useRef<HTMLInputElement | null>(null);
     const [uploadNodeId, setUploadNodeId] = useState<string | null>(null);
@@ -267,6 +268,13 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         await onSetMedia?.(target.id, null);
     }
 
+    async function handleMenuToggleMediaFill() {
+        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
+        closeMenu(target?.id);
+        if (!target || !target.media) return;
+        await onSetMediaFill?.(target.id, !target.mediaFill);
+    }
+
     function handleCancelDelete() {
         const target = deleteTarget;
         setDeleteTarget(null);
@@ -433,6 +441,7 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                                 key={n.id}
                                 {...nodeProps}
                                 media={n.media ?? null}
+                                mediaFill={n.mediaFill}
                                 onOpenMedia={handleOpenMediaBadge}
                                 loadBlob={loadBlob}
                             />
@@ -462,6 +471,7 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                     kind={menuTarget.kind}
                     url={menuTarget.url ?? null}
                     media={menuTarget.media ?? null}
+                    mediaFill={menuTarget.mediaFill}
                     collapsed={menuTarget.collapsed}
                     hasChildren={menuHasChildren}
                     isRoot={menuTarget.id === rootNodeId}
@@ -474,6 +484,7 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                     onEditMedia={handleMenuMedia}
                     onOpenMedia={handleOpenMedia}
                     onRemoveMedia={() => void handleRemoveMedia()}
+                    onToggleMediaFill={() => void handleMenuToggleMediaFill()}
                     onUploadImage={handleMenuUploadImage}
                     canUpload={canUpload ?? false}
                     onToggleCollapse={handleMenuToggleCollapse}

@@ -10,6 +10,7 @@ type NodeContextMenuProps = {
     kind: NodeKind;
     url: string | null;
     media: NodeMedia | null;
+    mediaFill: boolean;
     collapsed: boolean;
     hasChildren: boolean;
     isRoot: boolean;
@@ -22,6 +23,7 @@ type NodeContextMenuProps = {
     onEditMedia: () => void;
     onOpenMedia: () => void;
     onRemoveMedia: () => void;
+    onToggleMediaFill: () => void;
     onUploadImage: () => void;
     canUpload: boolean;
     onToggleCollapse: () => void;
@@ -34,6 +36,7 @@ export default function NodeContextMenu({
     kind,
     url,
     media,
+    mediaFill,
     collapsed,
     hasChildren,
     isRoot,
@@ -46,6 +49,7 @@ export default function NodeContextMenu({
     onEditMedia,
     onOpenMedia,
     onRemoveMedia,
+    onToggleMediaFill,
     onUploadImage,
     canUpload,
     onToggleCollapse,
@@ -81,6 +85,16 @@ export default function NodeContextMenu({
             {media && (
                 <MenuItem onClick={onRemoveMedia} aria-label={`Remove media for "${text}"`}>
                     Remove media
+                </MenuItem>
+            )}
+            {media && (
+                <MenuItem
+                    onClick={onToggleMediaFill}
+                    role="menuitemcheckbox"
+                    aria-checked={mediaFill}
+                    aria-label={`Fill node with media for "${text}"`}
+                >
+                    {mediaFill ? "\u2713 Fill node with media" : "Fill node with media"}
                 </MenuItem>
             )}
             <MenuItem

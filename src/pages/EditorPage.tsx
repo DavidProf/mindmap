@@ -11,6 +11,7 @@ import {
     getViewportAsync,
     isQuotaError,
     setNodeCollapsedAsync,
+    setNodeMediaFillAsync,
     setNodeKindAsync,
     setNodeMediaAsync,
     setNodeUrlAsync,
@@ -226,6 +227,18 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not save media."));
+            return null;
+        }
+    }
+
+    async function handleSetMediaFill(nodeId: string, fill: boolean): Promise<Node | null> {
+        try {
+            const updated = await setNodeMediaFillAsync(backend, nodeId, fill);
+            await refreshNodes();
+            setError(null);
+            return updated;
+        } catch (e) {
+            setError(toEditorError(e, "Could not update the node."));
             return null;
         }
     }
@@ -446,6 +459,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
                     onSetKind={handleSetKind}
                     onSetUrl={handleSetUrl}
                     onSetMedia={handleSetMedia}
+                    onSetMediaFill={handleSetMediaFill}
                     onUploadMedia={(nodeId, file) => handleUploadMedia(nodeId, file)}
                     loadBlob={loadBlob}
                     canUpload={canUpload}

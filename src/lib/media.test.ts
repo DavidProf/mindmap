@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+    inlineVideoKindPure,
     loadExportMediaImages,
     mediaLoadWarningPure,
     revokeExportObjectUrls,
+    youtubeEmbedUrlPure,
     youtubeShortlinkPure,
     youtubeVideoIdPure,
 } from "./media";
@@ -128,5 +130,30 @@ describe("youtubeVideoIdPure", () => {
         );
         expect(youtubeShortlinkPure("https://youtu.be/dQw4w9WgXcQ")).toBe("https://youtu.be/dQw4w9WgXcQ");
         expect(youtubeShortlinkPure("https://example.com/v.mp4")).toBeNull();
+    });
+});
+
+describe("inline video (13e)", () => {
+    it("plays direct video files inline", () => {
+        expect(inlineVideoKindPure("https://example.com/clip.mp4")).toBe("direct");
+        expect(inlineVideoKindPure("https://example.com/clip.webm?token=1")).toBe("direct");
+        expect(inlineVideoKindPure("example.com/clip.MOV")).toBe("direct");
+    });
+    it("plays youtube urls inline", () => {
+        expect(inlineVideoKindPure("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).toBe("youtube");
+        expect(inlineVideoKindPure("https://youtu.be/dQw4w9WgXcQ")).toBe("youtube");
+    });
+    it("keeps other providers and junk on open-in-new-tab", () => {
+        expect(inlineVideoKindPure("https://vimeo.com/123456")).toBeNull();
+        expect(inlineVideoKindPure("https://example.com/watch?v=abc")).toBeNull();
+        expect(inlineVideoKindPure("not a url")).toBeNull();
+        expect(inlineVideoKindPure("")).toBeNull();
+        expect(inlineVideoKindPure(null)).toBeNull();
+    });
+    it("builds nocookie embed urls with autoplay", () => {
+        expect(youtubeEmbedUrlPure("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).toBe(
+            "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1",
+        );
+        expect(youtubeEmbedUrlPure("https://example.com/v.mp4")).toBeNull();
     });
 });

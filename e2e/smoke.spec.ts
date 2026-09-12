@@ -161,3 +161,194 @@ test("export: preview opens, shows fitted image, and download closes it", async 
     expect(download.suggestedFilename()).toMatch(/-mindmap\.png$/);
     await expect(page.getByRole("heading", { name: "Export preview" })).toHaveCount(0);
 });
+
+test("media fill (13e): filled node hides text, toggle restores it", async ({ page }) => {
+    // 1x1 red PNG served for the node's image URL.
+    const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+    );
+    await page.route("**://example.com/test-image.png", (route) => route.fulfill({ body: png, contentType: "image/png", headers: { "Access-Control-Allow-Origin": "*" } }));
+
+    await page.addInitScript(() => {
+        const now = new Date().toISOString();
+        window.localStorage.setItem(
+            "mindmap:projects",
+            JSON.stringify([
+                { id: "p1", name: "Filled", rootNodeId: "r1", createdAt: now, updatedAt: now, viewport: { x: 0, y: 0, zoom: 1 } },
+            ]),
+        );
+        window.localStorage.setItem(
+            "mindmap:nodes",
+            JSON.stringify([
+                { id: "r1", projectId: "p1", parentId: null, text: "Root", kind: "circle", url: null, media: null, mediaFill: true, side: null, collapsed: false, createdAt: now, updatedAt: now },
+                {
+                    id: "n2",
+                    projectId: "p1",
+                    parentId: "r1",
+                    text: "Photo",
+                    kind: "note",
+                    url: null,
+                    media: { kind: "image", src: "https://example.com/test-image.png", uploadId: null },
+                    mediaFill: true,
+                    side: "south",
+                    collapsed: false,
+                    createdAt: now,
+                    updatedAt: now,
+                },
+            ]),
+        );
+    });
+
+    await page.goto("/#/project/p1");
+    await expect(page.getByTestId("tree-canvas")).toBeVisible();
+
+    const rect = page.locator('[data-node-id="n2"] .node-rect');
+    await expect(page.locator('[data-node-id="n2"] .node-rect--filled')).toBeVisible();
+    await expect(page.locator('[data-node-id="n2"] .node-rect__text')).toHaveCount(0);
+    await expect(page.locator('[data-node-id="n2"] .node-rect__img')).toBeVisible();
+
+    await rect.click({ button: "right" });
+    const item = page.getByRole("menuitemcheckbox", { name: 'Fill node with media for "Photo"' });
+    await expect(item).toHaveAttribute("aria-checked", "true");
+    await item.click();
+
+    await expect(page.locator('[data-node-id="n2"] .node-rect__text')).toHaveText("Photo");
+    await expect(page.locator('[data-node-id="n2"] .node-rect__media')).toBeVisible();
+
+    await rect.click({ button: "right" });
+    const itemOff = page.getByRole("menuitemcheckbox", { name: 'Fill node with media for "Photo"' });
+    await expect(itemOff).toHaveAttribute("aria-checked", "false");
+    await itemOff.click();
+
+    await expect(page.locator('[data-node-id="n2"] .node-rect--filled')).toBeVisible();
+    await expect(page.locator('[data-node-id="n2"] .node-rect__text')).toHaveCount(0);
+});
+
+test("media fill (13e): export paints the filled node with the image", async ({ page }) => {
+    const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+    );
+    await page.route("**://example.com/test-image.png", (route) => route.fulfill({ body: png, contentType: "image/png", headers: { "Access-Control-Allow-Origin": "*" } }));
+
+    await page.addInitScript(() => {
+        const now = new Date().toISOString();
+        window.localStorage.setItem(
+            "mindmap:projects",
+            JSON.stringify([
+                { id: "p1", name: "FilledExport", rootNodeId: "r1", createdAt: now, updatedAt: now, viewport: { x: 0, y: 0, zoom: 1 } },
+            ]),
+        );
+        window.localStorage.setItem(
+            "mindmap:nodes",
+            JSON.stringify([
+                { id: "r1", projectId: "p1", parentId: null, text: "Root", kind: "circle", url: null, media: null, mediaFill: true, side: null, collapsed: false, createdAt: now, updatedAt: now },
+                {
+                    id: "n2",
+                    projectId: "p1",
+                    parentId: "r1",
+                    text: "Photo",
+                    kind: "note",
+                    url: null,
+                    media: { kind: "image", src: "https://example.com/test-image.png", uploadId: null },
+                    mediaFill: true,
+                    side: "south",
+                    collapsed: false,
+                    createdAt: now,
+                    updatedAt: now,
+                },
+            ]),
+        );
+    });
+
+    await page.goto("/#/project/p1");
+    await expect(page.locator('[data-node-id="n2"] .node-rect--filled')).toBeVisible();
+
+    await page.getByRole("button", { name: "Export PNG" }).click();
+    const image = page.getByTestId("export-preview-image");
+    await expect(image).toBeVisible();
+    const src = await image.getAttribute("src");
+    expect(src?.startsWith("data:image/png")).toBe(true);
+
+    const redPixels = await page.evaluate(async (dataUrl) => {
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = dataUrl;
+        });
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("no 2d");
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let count = 0;
+        for (let i = 0; i < data.length; i += 4) {
+            // The fixture image is 50%-alpha red over white, so it blends to pink.
+            if (data[i] > 200 && data[i + 1] > 100 && data[i + 1] < 160 && data[i + 2] > 100 && data[i + 2] < 160) count++;
+        }
+        return count;
+    }, src!);
+
+    // Full-bleed cover paints nearly the whole node; the thumbnail-well
+    // fallback would draw well under half as much.
+    expect(redPixels).toBeGreaterThan(40000);
+});
+
+test("media fill (13e): video node plays inline on click and stops on click-out", async ({ page }) => {
+    await page.route("**://example.com/clip.mp4", (route) =>
+        route.fulfill({
+            body: Buffer.alloc(256, 0),
+            contentType: "video/mp4",
+            headers: { "Access-Control-Allow-Origin": "*" },
+        }),
+    );
+
+    await page.addInitScript(() => {
+        const now = new Date().toISOString();
+        window.localStorage.setItem(
+            "mindmap:projects",
+            JSON.stringify([
+                { id: "p1", name: "Video", rootNodeId: "r1", createdAt: now, updatedAt: now, viewport: { x: 0, y: 0, zoom: 1 } },
+            ]),
+        );
+        window.localStorage.setItem(
+            "mindmap:nodes",
+            JSON.stringify([
+                { id: "r1", projectId: "p1", parentId: null, text: "Root", kind: "circle", url: null, media: null, mediaFill: true, side: null, collapsed: false, createdAt: now, updatedAt: now },
+                {
+                    id: "n2",
+                    projectId: "p1",
+                    parentId: "r1",
+                    text: "Clip",
+                    kind: "note",
+                    url: null,
+                    media: { kind: "video", src: "https://example.com/clip.mp4", uploadId: null },
+                    mediaFill: true,
+                    side: "south",
+                    collapsed: false,
+                    createdAt: now,
+                    updatedAt: now,
+                },
+            ]),
+        );
+    });
+
+    await page.goto("/#/project/p1");
+    await expect(page.getByTestId("tree-canvas")).toBeVisible();
+
+    const play = page.getByRole("button", { name: 'Play video for "Clip"' });
+    await expect(play).toBeVisible();
+    await play.click();
+
+    const video = page.locator('[data-node-id="n2"] .node-rect__player video[controls]');
+    await expect(video).toBeVisible();
+    await expect(video).toHaveAttribute("src", "https://example.com/clip.mp4");
+
+    // Clicking the canvas outside the node deselects it and unmounts the player.
+    await page.getByTestId("tree-canvas").click({ position: { x: 20, y: 20 } });
+    await expect(page.locator('[data-node-id="n2"] .node-rect__player')).toHaveCount(0);
+});

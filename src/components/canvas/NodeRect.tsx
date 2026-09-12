@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { NOTE_HEIGHT, NOTE_WIDTH } from "../../lib/layout";
+import { isMediaFilledPure } from "../../types/node";
 import type { NodeMedia, NodeSide } from "../../types/node";
+import { inlineVideoKindPure, youtubeEmbedUrlPure } from "../../lib/media";
 import NodeEditor from "./NodeEditor";
 import NodeLinkBadge from "./NodeLinkBadge";
 import NodeMediaGlyph from "./NodeMediaGlyph";
@@ -14,6 +16,7 @@ type NodeRectProps = {
     text: string;
     url: string | null;
     media: NodeMedia | null;
+    mediaFill: boolean;
     x: number;
     y: number;
     selected: boolean;
@@ -37,6 +40,7 @@ export default function NodeRect({
     text,
     url,
     media,
+    mediaFill,
     x,
     y,
     selected,
@@ -59,6 +63,14 @@ export default function NodeRect({
     const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
     const uploadId = media?.uploadId ?? null;
     const showImage = media?.kind === "image" && media.src.trim().length > 0 && media.src !== brokenSrc;
+    const filled = isMediaFilledPure({ media, mediaFill });
+    const [playing, setPlaying] = useState(false);
+    // Reselecting a video node needs a fresh play click, not auto-resume.
+    if (!selected && playing) setPlaying(false);
+    const inlineVideo = media?.kind === "video" ? inlineVideoKindPure(media.src) : null;
+    // The player unmounts on deselect because rendering requires selection.
+    const showPlayer = selected && playing && inlineVideo !== null;
+    const embedSrc = media?.kind === "video" ? youtubeEmbedUrlPure(media.src) : null;
 
     return (
         <div
@@ -73,7 +85,7 @@ export default function NodeRect({
             }}
         >
             <div
-                className={`node-rect${media ? " node-rect--media" : ""}`}
+                className={`node-rect${media ? " node-rect--media" : ""}${filled ? " node-rect--filled" : ""}`}
                 title={needsTooltip ? text : undefined}
                 aria-label={text}
                 tabIndex={0}
@@ -97,10 +109,46 @@ export default function NodeRect({
                     />
                 ) : (
                     <>
-                        <span className={`node-rect__text${media ? " node-rect__text--media" : ""}`}>{text}</span>
+                        {!filled && <span className={`node-rect__text${media ? " node-rect__text--media" : ""}`}>{text}</span>}
+                        {showPlayer && inlineVideo === "direct" && (
+                            <div className="node-rect__player" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+                                <video src={media!.src} controls autoPlay />
+                            </div>
+                        )}
+                        {showPlayer && inlineVideo === "youtube" && embedSrc !== null && (
+                            <div className="node-rect__player" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+                                <iframe
+                                    src={embedSrc}
+                                    title={`Video for "${text}"`}
+                                    allow="autoplay; encrypted-media; picture-in-picture"
+                                    allowFullScreen
+                                />
+                            </div>
+                        )}
+                        {!showPlayer && media?.kind === "video" && (
+                            <button
+                                type="button"
+                                className="node-rect__play"
+                                title="Play video"
+                                aria-label={`Play video for "${text}"`}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onSelect(id);
+                                    setPlaying(true);
+                                }}
+                            >
+                                <span aria-hidden="true">{"\u25B6"}</span>
+                            </button>
+                        )}
                         {media &&
                             (uploadId && loadBlob ? (
-                                <NodeUploadedImage uploadId={uploadId} loadBlob={loadBlob} />
+                                <NodeUploadedImage uploadId={uploadId} loadBlob={loadBlob} fill={filled} />
                             ) : (
                                 <span className="node-rect__media" aria-hidden="true">
                                     {showImage ? (

@@ -116,6 +116,25 @@
     padding: 8px;
 }
 
+/* Full-bleed mode (13e): media covers the node, text hidden. */
+.node-rect--filled {
+    padding: 0;
+}
+
+.node-rect--filled .node-rect__media {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    flex: 1;
+    border: none;
+    border-radius: inherit;
+    background: var(--surface);
+}
+
+.node-rect--filled .node-rect__img {
+    object-fit: cover;
+}
+
 .node-rect__text--media {
     -webkit-line-clamp: 2;
     font-size: 11px;
@@ -146,6 +165,56 @@
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Inline video playback (13e): player covers the node, play invites the click. */
+.node-rect__player {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: #000;
+    border-radius: inherit;
+    overflow: hidden;
+}
+
+.node-rect__player video,
+.node-rect__player iframe {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border: 0;
+    display: block;
+}
+
+.node-rect__play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    border: 1.5px solid var(--node-stroke);
+    border-radius: var(--radius-full);
+    color: var(--text);
+    font-size: 13px;
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    padding: 0 0 0 3px;
+}
+
+.node-rect__play:hover {
+    border-color: var(--plus-accent);
+    color: var(--plus-accent);
+}
+
+.node-rect__play:focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 1px;
 }
 
 .node-plus {

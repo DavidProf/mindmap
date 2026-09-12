@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     buildExportFilename,
+    coverFitPure,
     EXPORT_PADDING,
     hasDrawableImage,
     linkBadgeCenterPure,
@@ -215,5 +216,22 @@ describe("photo export guards (13c/F-01, F-03)", () => {
         expect(hasDrawableImage({ naturalWidth: 0, naturalHeight: 100 })).toBe(false);
         expect(hasDrawableImage({ naturalWidth: 100, naturalHeight: 0 })).toBe(false);
         expect(hasDrawableImage({ naturalWidth: 100, naturalHeight: 50 })).toBe(true);
+    });
+});
+
+describe("coverFitPure (13e)", () => {
+    it("scales to fill, cropping the longer overflow", () => {
+        // 2:1 image into a square: width fills, height overflows.
+        expect(coverFitPure(200, 100, 100, 100)).toEqual({ dw: 200, dh: 100 });
+    });
+
+    it("covers portrait images into landscape boxes", () => {
+        const { dw, dh } = coverFitPure(100, 200, 200, 100);
+        expect(dw).toBe(200);
+        expect(dh).toBe(400);
+    });
+
+    it("keeps square images exact", () => {
+        expect(coverFitPure(50, 50, 100, 100)).toEqual({ dw: 100, dh: 100 });
     });
 });
