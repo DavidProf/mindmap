@@ -6,6 +6,7 @@ import {
     revokeExportObjectUrls,
     youtubeEmbedUrlPure,
     youtubeShortlinkPure,
+    videoThumbnailUrlPure,
     youtubeVideoIdPure,
 } from "./media";
 
@@ -105,6 +106,39 @@ describe("mediaLoadWarningPure", () => {    it("returns null with no names", () 
     it("truncates long name lists", () => {
         const warning = mediaLoadWarningPure(["a", "b", "c", "d", "e"])!;
         expect(warning).toContain("and 2 more");
+    });
+});
+
+describe("videoThumbnailUrlPure", () => {
+    it("builds a thumbnail url from youtube video sources", () => {
+        expect(videoThumbnailUrlPure("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).toBe(
+            "https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg",
+        );
+        expect(videoThumbnailUrlPure("https://youtu.be/dQw4w9WgXcQ")).toBe(
+            "https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg",
+        );
+    });
+    it("returns null for direct files and non-videos", () => {
+        expect(videoThumbnailUrlPure("https://example.com/v.mp4")).toBeNull();
+        expect(videoThumbnailUrlPure("https://example.com/a.png")).toBeNull();
+        expect(videoThumbnailUrlPure(null)).toBeNull();
+    });
+    it("loads youtube video thumbnails for export alongside images", async () => {
+        const loaded: string[] = [];
+        const result = await loadExportMediaImages(
+            [
+                { id: "yt", media: { kind: "video", src: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", uploadId: null } },
+                { id: "direct", media: { kind: "video", src: "https://example.com/v.mp4", uploadId: null } },
+                { id: "img", media: { kind: "image", src: "https://example.com/a.png", uploadId: null } },
+            ],
+            { loadOne: async (src) => (loaded.push(src), fakeImage()) },
+        );
+        expect(loaded).toContain("https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg");
+        expect(result.images.has("yt")).toBe(true);
+        expect(result.images.has("img")).toBe(true);
+        // Direct video files keep the glyph; nothing to rasterize.
+        expect(result.images.has("direct")).toBe(false);
+        expect(result.failedIds).toEqual([]);
     });
 });
 

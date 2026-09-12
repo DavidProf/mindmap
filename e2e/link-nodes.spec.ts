@@ -12,7 +12,7 @@ test("links: attach via dialog shows badge and persists across reload", async ({
 
     const root = page.getByLabel(projectName, { exact: true });
     await root.click({ button: "right" });
-    await page.getByRole("menuitem", { name: `Add link for "${projectName}"` }).click();
+    await page.getByRole("button", { name: `Add link for "${projectName}"` }).click();
     await expect(page.getByRole("heading", { name: "Add link" })).toBeVisible();
 
     const urlField = page.getByLabel("Link URL");

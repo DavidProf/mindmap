@@ -12,7 +12,7 @@ test("media: attach via dialog shows badge and persists across reload", async ({
 
     const root = page.getByLabel(projectName, { exact: true });
     await root.click({ button: "right" });
-    await page.getByRole("menuitem", { name: `Add media for "${projectName}"` }).click();
+    await page.getByRole("button", { name: `Add media to "${projectName}"` }).click();
     await expect(page.getByRole("heading", { name: "Add media" })).toBeVisible();
 
     const urlField = page.getByLabel("Media URL");
@@ -40,7 +40,7 @@ test("media: broken image warns in export preview and suggests manual add", asyn
 
     const root = page.getByLabel(projectName, { exact: true });
     await root.click({ button: "right" });
-    await page.getByRole("menuitem", { name: `Add media for "${projectName}"` }).click();
+    await page.getByRole("button", { name: `Add media to "${projectName}"` }).click();
     await page.getByLabel("Media URL").fill("https://example.com/does-not-exist-13c.png");
     await page.getByRole("button", { name: "Save media" }).click();
     await expect(page.getByRole("button", { name: `Open image for "${projectName}"` })).toBeVisible();

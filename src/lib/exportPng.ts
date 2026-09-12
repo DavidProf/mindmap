@@ -413,7 +413,7 @@ export function renderMapToCanvas(args: {
         // Media placeholder only: external pixels are never fetched, so the
         // canvas cannot taint and toBlob keeps working.
         if (shouldDrawMediaBadge(node.media)) {
-            const badge = mediaBadgeCenterPure(cx, cy, scale);
+            const badge = mediaBadgeCenterPure(cx, cy, scale, size);
             ctx.beginPath();
             ctx.arc(badge.x, badge.y, badge.radius, 0, Math.PI * 2);
             ctx.fillStyle = background;

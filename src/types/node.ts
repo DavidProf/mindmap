@@ -48,7 +48,7 @@ export function normalizeNodeUrlValue(value: unknown): string | null {
     return href;
 }
 
-export const NODE_SIZES = ["small", "medium", "large"] as const;
+export const NODE_SIZES = ["small", "medium", "large", "xlarge"] as const;
 
 export type NodeSize = (typeof NODE_SIZES)[number];
 

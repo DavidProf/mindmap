@@ -218,9 +218,10 @@ describe("computeLayout", () => {
     it("scales note radii by size profile and ignores size for circles", () => {
         expect(nodeRadius("note", "medium")).toBeGreaterThan(nodeRadius("note", "small"));
         expect(nodeRadius("note", "large")).toBeGreaterThan(nodeRadius("note", "medium"));
-        expect(nodeRadius("circle", "large")).toBe(NODE_DIAMETER / 2);
-        const med = NODE_SIZE_PROFILES.medium;
-        expect(nodeRadius("note", "medium")).toBeCloseTo(Math.hypot(med.width, med.height) / 2, 10);
+        expect(nodeRadius("note", "xlarge")).toBeGreaterThan(nodeRadius("note", "large"));
+        expect(nodeRadius("circle", "xlarge")).toBe(NODE_DIAMETER / 2);
+        const xl = NODE_SIZE_PROFILES.xlarge;
+        expect(nodeRadius("note", "xlarge")).toBeCloseTo(Math.hypot(xl.width, xl.height) / 2, 10);
     });
 
     it("gives a large note more clearance than a small one and pads bounds by its footprint", () => {

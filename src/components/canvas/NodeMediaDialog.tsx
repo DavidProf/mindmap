@@ -6,13 +6,17 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Checkbox from "@mui/material/Checkbox";
 import type { NodeMedia, NodeMediaKind } from "../../types/node";
 import { isNodeMediaKind } from "../../types/node";
-import { validateNodeMediaPure } from "../../storage/localStore";
+import { MAX_NOTE_TEXT_LENGTH, validateNodeMediaPure } from "../../storage/localStore";
 import { TOKENS } from "../../theme/tokens";
 import { PILL_SX } from "../pillSx";
 
-export type NodeMediaTarget = { nodeId: string; text: string; media: NodeMedia | null };
+export type NodeMediaTarget = { nodeId: string; text: string; media: NodeMedia | null; fill: boolean; combined: boolean };
+
+export type CombinedMediaSave = { text: string; media: NodeMedia | null; fill: boolean };
 
 export const UPLOAD_ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 
@@ -21,21 +25,37 @@ type NodeMediaDialogProps = {
     canUpload: boolean;
     onCancel: () => void;
     onSave: (media: NodeMedia | null) => void;
+    onCombinedSave: (save: CombinedMediaSave) => void;
     onUploadFile: (file: File) => Promise<string | null>;
 };
 
-export default function NodeMediaDialog({ target, canUpload, onCancel, onSave, onUploadFile }: NodeMediaDialogProps) {
+export default function NodeMediaDialog({ target, canUpload, onCancel, onSave, onCombinedSave, onUploadFile }: NodeMediaDialogProps) {
     const [mediaKind, setMediaKind] = useState<NodeMediaKind>(target?.media?.kind ?? "image");
     const [draft, setDraft] = useState(target?.media?.src ?? "");
+    const [draftText, setDraftText] = useState(target?.text ?? "");
+    const [draftFill, setDraftFill] = useState(target?.fill ?? true);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
+    const combined = target?.combined ?? false;
 
     const trimmed = draft.trim();
     const error = trimmed.length === 0 ? null : validateNodeMediaPure(mediaKind, draft);
     const hasMedia = (target?.media ?? null) !== null;
 
+    // Upload-based media keeps its pixels when the URL field is left empty;
+    // a non-empty URL always wins as a fresh URL source.
+    function computeMedia(): NodeMedia | null {
+        if (trimmed.length > 0) return { kind: mediaKind, src: draft, uploadId: null };
+        const upload = target?.media;
+        return upload?.uploadId ? upload : null;
+    }
+
     function handleSave() {
         if (error) return;
+        if (combined && onCombinedSave) {
+            onCombinedSave({ text: draftText, media: computeMedia(), fill: draftFill });
+            return;
+        }
         if (trimmed.length === 0) {
             onSave(null);
             return;
@@ -57,8 +77,19 @@ export default function NodeMediaDialog({ target, canUpload, onCancel, onSave, o
 
     return (
         <Dialog open={target !== null} onClose={onCancel} maxWidth="xs" fullWidth>
-            <DialogTitle>{hasMedia ? "Edit media" : "Add media"}</DialogTitle>
+            <DialogTitle>{combined ? "Edit node" : hasMedia ? "Edit media" : "Add media"}</DialogTitle>
             <DialogContent>
+                {combined && (
+                    <TextField
+                        fullWidth
+                        margin="dense"
+                        label="Text"
+                        value={draftText}
+                        onChange={(e) => setDraftText(e.target.value.slice(0, MAX_NOTE_TEXT_LENGTH))}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        slotProps={{ htmlInput: { "aria-label": "Node text", maxLength: MAX_NOTE_TEXT_LENGTH } }}
+                    />
+                )}
                 <TextField
                     select
                     fullWidth
@@ -110,10 +141,23 @@ export default function NodeMediaDialog({ target, canUpload, onCancel, onSave, o
                         File uploads need IndexedDB storage, which is unavailable here. URL media still works.
                     </div>
                 )}
+                {combined && (
+                    <FormControlLabel
+                        control={<Checkbox checked={draftFill} onChange={(e) => setDraftFill(e.target.checked)} />}
+                        label="Fill node with media"
+                    />
+                )}
             </DialogContent>
             <DialogActions>
                 {hasMedia && (
-                    <Button onClick={() => onSave(null)} aria-label="Remove media" sx={PILL_SX}>
+                    <Button
+                        onClick={() => {
+                            if (combined && onCombinedSave) onCombinedSave({ text: draftText, media: null, fill: draftFill });
+                            else onSave(null);
+                        }}
+                        aria-label="Remove media"
+                        sx={PILL_SX}
+                    >
                         Remove
                     </Button>
                 )}

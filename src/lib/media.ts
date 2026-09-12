@@ -47,16 +47,18 @@ export async function loadExportMediaImages(
     const objectUrls: string[] = [];
     await Promise.all(
         nodes
-            .filter((n) => n.media?.kind === "image")
+            .filter((n) => n.media !== null && (n.media.kind === "image" || videoThumbnailUrlPure(n.media.src) !== null))
             .map(async (n) => {
                 const media = n.media!;
                 try {
-                    let src = media.src;
+                    // YouTube videos export with their thumbnail; direct files keep the glyph.
+                    let src = media.kind === "video" ? (videoThumbnailUrlPure(media.src) ?? "") : media.src;
                     const uploadId = media.uploadId ?? null;
-                    if (uploadId && resolveUpload) {
+                    if (media.kind === "image" && uploadId && resolveUpload) {
                         src = await withTimeout(resolveUpload(uploadId), timeoutMs, uploadId);
                         objectUrls.push(src);
                     }
+                    if (src.length === 0) return;
                     images.set(n.id, await withTimeout(loadOne(src), timeoutMs, src));
                 } catch {
                     images.delete(n.id);
@@ -134,4 +136,10 @@ export function youtubeVideoIdPure(src: unknown): string | null {
 export function youtubeShortlinkPure(src: unknown): string | null {
     const id = youtubeVideoIdPure(src);
     return id === null ? null : `https://youtu.be/${id}`;
+}
+
+// Thumbnail for video previews; direct files preview via <video>, so null.
+export function videoThumbnailUrlPure(src: unknown): string | null {
+    const id = youtubeVideoIdPure(src);
+    return id === null ? null : `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
 }

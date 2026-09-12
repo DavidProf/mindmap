@@ -209,17 +209,21 @@ test("media fill (13e): filled node hides text, toggle restores it", async ({ pa
     await expect(page.locator('[data-node-id="n2"] .node-rect__img')).toBeVisible();
 
     await rect.click({ button: "right" });
-    const item = page.getByRole("menuitemcheckbox", { name: 'Fill node with media for "Photo"' });
-    await expect(item).toHaveAttribute("aria-checked", "true");
-    await item.click();
+    await page.getByRole("button", { name: 'Edit "Photo"' }).click();
+    const fillBox = page.getByRole("checkbox", { name: "Fill node with media" });
+    await expect(fillBox).toBeChecked();
+    await fillBox.click();
+    await page.getByRole("button", { name: "Save media" }).click();
 
     await expect(page.locator('[data-node-id="n2"] .node-rect__text')).toHaveText("Photo");
     await expect(page.locator('[data-node-id="n2"] .node-rect__media')).toBeVisible();
 
     await rect.click({ button: "right" });
-    const itemOff = page.getByRole("menuitemcheckbox", { name: 'Fill node with media for "Photo"' });
-    await expect(itemOff).toHaveAttribute("aria-checked", "false");
-    await itemOff.click();
+    await page.getByRole("button", { name: 'Edit "Photo"' }).click();
+    const fillBoxOff = page.getByRole("checkbox", { name: "Fill node with media" });
+    await expect(fillBoxOff).not.toBeChecked();
+    await fillBoxOff.click();
+    await page.getByRole("button", { name: "Save media" }).click();
 
     await expect(page.locator('[data-node-id="n2"] .node-rect--filled')).toBeVisible();
     await expect(page.locator('[data-node-id="n2"] .node-rect__text')).toHaveCount(0);

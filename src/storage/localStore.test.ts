@@ -359,11 +359,11 @@ describe("node media fill (13e)", () => {
         const missing = node("a", "p1", null) as unknown as Record<string, unknown>;
         delete missing.size;
         const invalid = { ...node("b", "p1", null), size: "huge" };
-        const valid = { ...node("c", "p1", null), size: "medium" };
+        const valid = { ...node("c", "p1", null), size: "xlarge" };
         const out = normalizeNodes([missing, invalid, valid] as unknown as Node[]);
         expect(out[0].size).toBe("small");
         expect(out[1].size).toBe("small");
-        expect(out[2].size).toBe("medium");
+        expect(out[2].size).toBe("xlarge");
         expect(out[2]).toBe(valid);
     });
     it("keeps explicit false only while media is attached", () => {

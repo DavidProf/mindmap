@@ -20,6 +20,15 @@ export const NODE_SIZE_PROFILES: Record<NodeSize, { width: number; height: numbe
     small: { width: NOTE_WIDTH, height: NOTE_HEIGHT },
     medium: { width: Math.round(NOTE_WIDTH * 1.4), height: Math.round(NOTE_HEIGHT * 1.4) },
     large: { width: Math.round(NOTE_WIDTH * 1.8), height: Math.round(NOTE_HEIGHT * 1.8) },
+    xlarge: { width: Math.round(NOTE_WIDTH * 2.2), height: Math.round(NOTE_HEIGHT * 2.2) },
+};
+
+// One-letter menu label per size, shown side by side in the context menu.
+export const NODE_SIZE_LABELS: Record<NodeSize, string> = {
+    small: "S",
+    medium: "M",
+    large: "L",
+    xlarge: "XL",
 };
 
 // Size only affects note-kind footprints; callers pass it alongside kindOf.

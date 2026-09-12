@@ -39,7 +39,7 @@ type TreeCanvasProps = {
     onSetMedia?: (nodeId: string, media: NodeMedia | null) => Promise<Node | null>;
     onSetMediaFill?: (nodeId: string, fill: boolean) => Promise<Node | null>;
     onSetSize?: (nodeId: string, size: NodeSize) => Promise<Node | null>;
-    onUploadMedia?: (nodeId: string, file: File) => Promise<string | null>;
+    onUploadMedia?: (nodeId: string, file: File) => Promise<{ message: string | null; media: NodeMedia | null }>;
     loadBlob?: (uploadId: string) => Promise<Blob | null>;
     canUpload?: boolean;
     onToggleCollapsed?: (nodeId: string) => Promise<Node | null>;
@@ -115,6 +115,13 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
     function handleEditStart(id: string) {
         commitPendingEdit(id);
         setSelectedId(id);
+        // Media nodes edit in the combined dialog (text + media + fill),
+        // never in the inline textarea: text is an alias there.
+        const node = nodes.find((n) => n.id === id);
+        if (node?.kind === "media") {
+            setMediaTarget({ nodeId: id, text: node.text, media: node.media ?? null, fill: node.mediaFill, combined: true });
+            return;
+        }
         setEditingId(id);
     }
 
@@ -195,25 +202,26 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         focusCircle(target.nodeId);
     }
 
-    function handleOpenLink() {
-        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
-        const url = target?.url ?? null;
-        closeMenu(target?.id);
-        if (url) openNodeUrl(url);
-    }
-
-    async function handleRemoveLink() {
-        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
-        closeMenu(target?.id);
-        if (!target || !target.url) return;
-        await onSetUrl?.(target.id, null);
-    }
-
     function handleMenuMedia() {
         const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
         closeMenu(target?.id);
         if (!target) return;
-        setMediaTarget({ nodeId: target.id, text: target.text, media: target.media ?? null });
+        const combined = target.kind === "media";
+        setMediaTarget({ nodeId: target.id, text: target.text, media: target.media ?? null, fill: target.mediaFill, combined });
+    }
+
+    async function handleCombinedSave(save: { text: string; media: NodeMedia | null; fill: boolean }) {
+        const target = mediaTarget;
+        if (!target) return;
+        setMediaTarget(null);
+        // Media first: the kind follows the media; fill only applies while
+        // media is attached; text last so the editor reverts cleanly.
+        await onSetMedia?.(target.nodeId, save.media);
+        if (save.media !== null) await onSetMediaFill?.(target.nodeId, save.fill);
+        const node = nodes.find((n) => n.id === target.nodeId);
+        const trimmed = save.text.trim();
+        if (node && trimmed.length > 0 && trimmed !== node.text) await onUpdateText?.(target.nodeId, save.text);
+        focusCircle(target.nodeId);
     }
 
     function handleCancelMedia() {
@@ -230,46 +238,31 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         focusCircle(target.nodeId);
     }
 
-    function handleOpenMedia() {
-        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
-        const media = target?.media ?? null;
-        closeMenu(target?.id);
-        if (media && media.src.trim().length > 0) openNodeUrl(media.src);
+    async function handlePickedUpload(nodeId: string, file: File | null): Promise<{ message: string | null; media: NodeMedia | null }> {
+        if (!file) return { message: null, media: null };
+        const result = (await onUploadMedia?.(nodeId, file)) ?? { message: null, media: null };
+        if (result.message === null) focusCircle(nodeId);
+        return result;
     }
 
-    async function handlePickedUpload(nodeId: string, file: File | null): Promise<string | null> {
-        if (!file) return null;
-        const message = (await onUploadMedia?.(nodeId, file)) ?? null;
-        if (message === null) focusCircle(nodeId);
-        return message;
-    }
-
-    async function handleDialogUploadFile(file: File): Promise<string | null> {
+    async function handleDialogUploadFile(file: File): Promise<{ message: string | null; media: NodeMedia | null }> {
         const target = mediaTarget;
-        if (!target) return "Nothing to attach to.";
-        const message = await handlePickedUpload(target.nodeId, file);
-        // On success the dialog closes like a save; on error it stays open.
-        if (message === null) setMediaTarget(null);
-        return message;
-    }
-
-    async function handleRemoveMedia() {
-        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
-        closeMenu(target?.id);
-        if (!target || !target.media) return;
-        await onSetMedia?.(target.id, null);
-    }
-
-    async function handleMenuToggleMediaFill() {
-        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
-        closeMenu(target?.id);
-        if (!target || !target.media) return;
-        await onSetMediaFill?.(target.id, !target.mediaFill);
+        if (!target) return { message: "Nothing to attach to.", media: null };
+        const result = await handlePickedUpload(target.nodeId, file);
+        // Combined mode keeps the dialog open on success so text and fill
+        // edits survive; the target picks up the fresh upload. Simple mode
+        // closes like a save. Errors keep the dialog open in both modes.
+        if (result.message === null) {
+            if (target.combined && result.media) setMediaTarget({ ...target, media: result.media });
+            else setMediaTarget(null);
+        }
+        return result;
     }
 
     function handleMenuSetSize(size: NodeSize) {
         const target = menu?.nodeId;
-        closeMenu(target);
+        // Keep the menu open: the letter row highlights the live choice and
+        // invites comparing sizes before dismissing.
         if (!target) return;
         void onSetSize?.(target, size);
     }
@@ -456,8 +449,6 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                     text={menuTarget.text}
                     kind={menuTarget.kind}
                     url={menuTarget.url ?? null}
-                    media={menuTarget.media ?? null}
-                    mediaFill={menuTarget.mediaFill}
                     size={menuTarget.size}
                     collapsed={menuTarget.collapsed}
                     hasChildren={menuHasChildren}
@@ -466,12 +457,7 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                     onEdit={handleMenuEdit}
                     onConvert={(kind) => void handleMenuConvert(kind)}
                     onEditLink={handleMenuLink}
-                    onOpenLink={handleOpenLink}
-                    onRemoveLink={() => void handleRemoveLink()}
                     onEditMedia={handleMenuMedia}
-                    onOpenMedia={handleOpenMedia}
-                    onRemoveMedia={() => void handleRemoveMedia()}
-                    onToggleMediaFill={() => void handleMenuToggleMediaFill()}
                     onSetSize={handleMenuSetSize}
                     onToggleCollapse={handleMenuToggleCollapse}
                     onDelete={handleMenuDelete}
@@ -486,12 +472,13 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                 onSave={(url) => void handleSaveLink(url)}
             />
             <NodeMediaDialog
-                key={mediaTarget ? `${mediaTarget.nodeId}:${mediaTarget.media?.kind ?? ""}:${mediaTarget.media?.src ?? ""}` : "media-closed"}
+                key={mediaTarget ? `${mediaTarget.nodeId}:${mediaTarget.combined ? "combined" : "simple"}` : "media-closed"}
                 target={mediaTarget}
                 canUpload={canUpload ?? false}
                 onCancel={handleCancelMedia}
                 onSave={(media) => void handleSaveMedia(media)}
-                onUploadFile={(file) => handleDialogUploadFile(file)}
+                onCombinedSave={(save) => void handleCombinedSave(save)}
+                onUploadFile={(file) => handleDialogUploadFile(file).then((r) => r.message)}
             />
             <div
                 className="tree-zoom-badge"

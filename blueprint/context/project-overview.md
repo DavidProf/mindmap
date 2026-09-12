@@ -1,6 +1,6 @@
 # Mindmap - Project Overview
 
-<!-- blueprint:source-hash 5813f812c1f7a4168d537d66988013f1334410c78cb136093313da9c29c69109 -->
+<!-- blueprint:source-hash 02eed4e259c450b7330145468ef46f6d845a0c2e9e939eac66021705ef331326 -->
 
 > Calm, mobile-first mind-map app where a centered root grows into a strict auto-laid-out tree that can be collapsed and exported as PNG - local-only, no login, Excalidraw-minimal on GitHub Pages.
 
@@ -37,16 +37,17 @@ In `build-plan.md` order (MVP 1-7 plus item 8 shipped):
 10. **Tree layout quality pass** - fix misleading placements (B→C[left] reading as root child; A→D[bottom] edge crossing B/C edges); subtree separation, edge routing, parent-proximity.
 11. **PNG export preview** - whole-tree fitted preview with confirm/download plus cancel.
 12. **IndexedDB storage** - IndexedDB primary with localStorage fallback plus unavailable warning.
-13. **Dense text and media nodes** - rectangle nodes for images/video/links and expanded text.
-14. **Graph cross-links** - arbitrary links between nodes (breaks strict tree).
-15. **Undo and redo** - in-memory stack for add/delete/edit/collapse.
-16. **Home enhancements** - duplicate project, search/filter/sort, JSON import/export.
-17. **Presentation and a11y polish** - present mode, dark mode, keyboard nav (incl. Select + Del to delete selected node), PDF/print, ads evaluation.
-18. **Multi-select nodes** - multi-select with bulk actions; sequenced after item 12.
-19. **Grid-like layout** - alternative placement model toward stable, direction-faithful positioning.
-20. **PNG preview fit-to-view** - scale whole-tree preview to fit the dialog without scrolling.
-21. **Share via URL** - encode a project into a shareable URL (query/hash) that opens or imports a copy, with length-limit and malformed-link handling.
-22. **Team sharing via short link** - cloud-backed short link for teammates to open and edit the same project; local-only remains the default. Sync must be delta-based (per-record `updatedAt` cursors plus delete tombstones), not whole-list transfer; tombstones not yet implemented.
+13. **Dense text and media nodes** - rectangle nodes for images/video/links and expanded text; includes sub-features 13a-13f (expanded-text rects, link nodes, media rects, local upload, full-bleed fill, node resize). *(done)*
+14. **Context menu polish** - icon-first node menu: Edit and link icons on one row, convert section with per-kind icons, size letters (S, M, L, XL), one media edit entry, Open link/Open media removed.
+15. **Graph cross-links** - arbitrary links between nodes (breaks strict tree).
+16. **Undo and redo** - in-memory stack for add/delete/edit/collapse.
+17. **Home enhancements** - duplicate project, search/filter/sort, JSON import/export.
+18. **Presentation and a11y polish** - present mode, dark mode, keyboard nav (incl. Select + Del to delete selected node), PDF/print, ads evaluation.
+19. **Multi-select nodes** - multi-select with bulk actions.
+20. **Grid-like layout** - alternative placement model toward stable, direction-faithful positioning.
+21. **PNG preview fit-to-view** - scale whole-tree preview to fit the dialog without scrolling.
+22. **Share via URL** - encode a project into a shareable URL (query/hash) that opens or imports a copy, with length-limit and malformed-link handling.
+23. **Team sharing via short link** - cloud-backed short link for teammates to open and edit the same project; local-only remains the default. Sync must be delta-based (per-record `updatedAt` cursors plus delete tombstones), not whole-list transfer; tombstones not yet implemented.
 
 ## Data model
 
@@ -68,10 +69,15 @@ Local-only, no backend. Layout positions computed, not stored. `localStorage` fo
 - `id` (string) - primary key
 - `projectId` (string) - FK to `Project.id`, cascade delete with project
 - `parentId` (string | null) - `null` for root only; otherwise single parent FK; enforces strict tree, no cycles, no multiple parents
-- `text` (string, trimmed, non-empty, max 30 chars) - plain text only, fixed uniform circle
+- `text` (string, trimmed, non-empty) - max 30 chars for circles, 280 for note-kind nodes (note and media)
+- `kind` (`"circle" | "note" | "media"`, default `"circle"`) - note-kind nodes render as rectangles; `media` is set by attaching media (never by convert) and reverts to `note` when media clears
+- `url` (string | null) - optional validated http(s) link on any node
+- `media` (`{ kind: "image" | "video", src: string, uploadId: string | null } | null`) - image uploads keep pixels in the blob store (`src` empty, `uploadId` set)
+- `mediaFill` (boolean, default true while media attached) - full-bleed media vs text-plus-thumbnail
+- `size` (`"small" | "medium" | "large"`, default `"small"`) - note-kind footprint; layout, canvas, and export share `NODE_SIZE_PROFILES`
+- `side` (`"north" | "east" | "south" | "west" | null`) - parent side the node grows from
 - `collapsed` (boolean, default false) - hides whole subtree; only valid when node has children
-- `createdAt` (string, ISO-8601)
-- `updatedAt` (string, ISO-8601)
+- `createdAt`, `updatedAt` (string, ISO-8601)
 - Relationship: self-referential tree via `parentId`; deleting a node deletes its subtree atomically after confirm
 - Empty-after-edit rule per plan: revert to previous text with validation (not an empty node)
 

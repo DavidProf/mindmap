@@ -146,9 +146,11 @@ describe("note export helpers", () => {
         const small = noteRectForExport(100, 50, 1);
         const medium = noteRectForExport(100, 50, 1, "medium");
         const large = noteRectForExport(100, 50, 1, "large");
+        const xl = noteRectForExport(100, 50, 1, "xlarge");
         expect(medium.width).toBeGreaterThan(small.width);
         expect(large.height).toBeGreaterThan(medium.height);
-        expect(large.width).toBe(NODE_SIZE_PROFILES.large.width);
+        expect(xl.width).toBeGreaterThan(large.width);
+        expect(xl.width).toBe(NODE_SIZE_PROFILES.xlarge.width);
         // Small stays the historical footprint.
         expect(small.width).toBe(NOTE_WIDTH);
         expect(small.height).toBe(NOTE_HEIGHT);

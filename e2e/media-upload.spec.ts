@@ -28,7 +28,7 @@ test("upload: attach via menu shows thumbnail, persists, previews, and removes",
     await createAndOpenProject(page, projectName);
 
     await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
-    await page.getByRole("menuitem", { name: `Add media for "${projectName}"` }).click();
+    await page.getByRole("button", { name: `Add media to "${projectName}"` }).click();
     await page.getByRole("dialog").locator('input[type="file"]').setInputFiles(fixturePng());
     // A successful dialog upload closes the dialog and attaches the image.
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -47,7 +47,7 @@ test("upload: attach via menu shows thumbnail, persists, previews, and removes",
     await page.getByRole("button", { name: "Cancel" }).click();
 
     await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
-    await page.getByRole("menuitem", { name: `Edit media for "${projectName}"` }).click();
+    await page.getByRole("button", { name: `Edit "${projectName}"` }).click();
     await page.getByRole("button", { name: "Remove media" }).click();
     await expect(page.getByRole("button", { name: `Open image for "${projectName}"` })).toHaveCount(0);
 });
@@ -57,15 +57,39 @@ test("upload: converting a media node to circle drops the media", async ({ page 
     await createAndOpenProject(page, projectName);
 
     await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
-    await page.getByRole("menuitem", { name: `Add media for "${projectName}"` }).click();
+    await page.getByRole("button", { name: `Add media to "${projectName}"` }).click();
     await page.getByRole("dialog").locator('input[type="file"]').setInputFiles(fixturePng());
     await expect(page.getByRole("button", { name: `Open image for "${projectName}"` })).toBeVisible();
 
     await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
-    await page.getByRole("menuitem", { name: `Convert "${projectName}" to circle` }).click();
+    await page.getByRole("button", { name: `Convert "${projectName}" to circle` }).click();
     await page.getByRole("button", { name: "Convert" }).click();
     await expect(page.getByRole("button", { name: `Open image for "${projectName}"` })).toHaveCount(0);
     await expect(page.locator(".node-circle").first()).toBeVisible();
+});
+
+test("upload: combined editor keeps unsaved edits when uploading mid-edit", async ({ page }) => {
+    const projectName = `Keep ${Date.now()}`;
+    await createAndOpenProject(page, projectName);
+
+    // Attach URL media first (node becomes media kind).
+    await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
+    await page.getByRole("button", { name: `Add media to "${projectName}"` }).click();
+    await page.getByLabel("Media URL").fill("https://example.com/a.png");
+    await page.getByRole("button", { name: "Save media" }).click();
+
+    // Open the combined editor, type text, then upload: edits must survive.
+    await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
+    await page.getByRole("button", { name: `Edit "${projectName}"` }).click();
+    await page.getByLabel("Text").fill("Remember me");
+    await page.getByRole("dialog").locator('input[type="file"]').setInputFiles(fixturePng());
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByLabel("Text")).toHaveValue("Remember me");
+    // Uncheck fill: filled nodes hide their text, so the text shows only unfilled.
+    await page.getByRole("checkbox", { name: "Fill node with media" }).click();
+    await page.getByRole("button", { name: "Save media" }).click();
+    await expect(page.getByText("Remember me")).toBeVisible();
+    await expect(page.locator(".node-rect__img")).toBeVisible();
 });
 
 test("upload: invalid file shows an inline error and saves nothing", async ({ page }) => {
@@ -73,7 +97,7 @@ test("upload: invalid file shows an inline error and saves nothing", async ({ pa
     await createAndOpenProject(page, projectName);
 
     await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
-    await page.getByRole("menuitem", { name: `Add media for "${projectName}"` }).click();
+    await page.getByRole("button", { name: `Add media to "${projectName}"` }).click();
     const dir = join(tmpdir(), "mindmap-upload-fixture");
     mkdirSync(dir, { recursive: true });
     const badPath = join(dir, "upload.txt");
@@ -93,6 +117,6 @@ test("upload: disabled with notice when IndexedDB is unavailable", async ({ page
 
     await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
 
-    await page.getByRole("menuitem", { name: `Add media for "${projectName}"` }).click();
+    await page.getByRole("button", { name: `Add media to "${projectName}"` }).click();
     await expect(page.getByText("Uploads need IndexedDB storage")).toBeVisible();
 });

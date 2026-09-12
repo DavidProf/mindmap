@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NODE_SIZE_PROFILES } from "../../lib/layout";
 import { isMediaFilledPure, normalizeNodeSizeValue } from "../../types/node";
 import type { NodeMedia, NodeSide, NodeSize } from "../../types/node";
-import { inlineVideoKindPure, youtubeEmbedUrlPure } from "../../lib/media";
+import { inlineVideoKindPure, videoThumbnailUrlPure, youtubeEmbedUrlPure } from "../../lib/media";
 import NodeEditor from "./NodeEditor";
 import NodeLinkBadge from "./NodeLinkBadge";
 import NodeMediaGlyph from "./NodeMediaGlyph";
@@ -75,6 +75,7 @@ export default function NodeRect({
     // Reselecting a video node needs a fresh play click, not auto-resume.
     if (!selected && playing) setPlaying(false);
     const inlineVideo = media?.kind === "video" ? inlineVideoKindPure(media.src) : null;
+    const videoThumbSrc = media?.kind === "video" ? videoThumbnailUrlPure(media.src) : null;
     // The player unmounts on deselect because rendering requires selection.
     const showPlayer = selected && playing && inlineVideo !== null;
     const embedSrc = media?.kind === "video" ? youtubeEmbedUrlPure(media.src) : null;
@@ -169,6 +170,17 @@ export default function NodeRect({
                                         draggable={false}
                                         onError={() => setBrokenSrc(media.src)}
                                     />
+                                ) : media.kind === "video" && videoThumbSrc !== null && videoThumbSrc !== brokenSrc ? (
+                                    <img
+                                        className="node-rect__img"
+                                        src={videoThumbSrc}
+                                        alt=""
+                                        loading="lazy"
+                                        draggable={false}
+                                        onError={() => setBrokenSrc(videoThumbSrc)}
+                                    />
+                                ) : media.kind === "video" && inlineVideo === "direct" ? (
+                                    <video className="node-rect__img" src={media.src} preload="metadata" muted playsInline />
                                 ) : (
                                     <span className="node-rect__placeholder">
                                         {media.kind === "video" ? (

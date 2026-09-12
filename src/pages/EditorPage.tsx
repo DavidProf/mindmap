@@ -261,29 +261,30 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         }
     }
 
-    async function handleUploadMedia(nodeId: string, file: File): Promise<string | null> {
+    async function handleUploadMedia(nodeId: string, file: File): Promise<{ message: string | null; media: NodeMedia | null }> {
         const invalid = validateImageFilePure(file);
-        if (invalid) return invalid;
+        if (invalid) return { message: invalid, media: null };
         const node = nodes?.find((n) => n.id === nodeId) ?? null;
-        if (!node) return "Node not found.";
+        if (!node) return { message: "Node not found.", media: null };
         let pixels: Blob;
         try {
             pixels = await downscaleImageFile(file);
         } catch (e) {
-            return e instanceof Error ? e.message : "Could not read that image file.";
+            return { message: e instanceof Error ? e.message : "Could not read that image file.", media: null };
         }
         const uploadId = genId();
         try {
             await blobStore.saveBlob({ id: uploadId, projectId: node.projectId, nodeId, blob: pixels, createdAt: nowIso() });
-            await replaceNodeMedia(nodeId, { kind: "image", src: "", uploadId });
+            const media: NodeMedia = { kind: "image", src: "", uploadId };
+            await replaceNodeMedia(nodeId, media);
             await refreshNodes();
             setError(null);
-            return null;
+            return { message: null, media };
         } catch (e) {
             await blobStore.deleteBlob(uploadId).catch(() => undefined);
             const message = toEditorError(e, "Could not save the uploaded image.");
             setError(message);
-            return message;
+            return { message, media: null };
         }
     }
 
