@@ -28,8 +28,10 @@ test("upload: attach via menu shows thumbnail, persists, previews, and removes",
     await createAndOpenProject(page, projectName);
 
     await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
-    await page.getByRole("menuitem", { name: `Upload image for "${projectName}"` }).click();
-    await page.locator('.tree-canvas input[type="file"]').setInputFiles(fixturePng());
+    await page.getByRole("menuitem", { name: `Add media for "${projectName}"` }).click();
+    await page.getByRole("dialog").locator('input[type="file"]').setInputFiles(fixturePng());
+    // A successful dialog upload closes the dialog and attaches the image.
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     const badge = page.getByRole("button", { name: `Open image for "${projectName}"` });
     await expect(badge).toBeVisible();
     await expect(page.locator(".node-rect__img")).toBeVisible();
@@ -48,6 +50,22 @@ test("upload: attach via menu shows thumbnail, persists, previews, and removes",
     await page.getByRole("menuitem", { name: `Edit media for "${projectName}"` }).click();
     await page.getByRole("button", { name: "Remove media" }).click();
     await expect(page.getByRole("button", { name: `Open image for "${projectName}"` })).toHaveCount(0);
+});
+
+test("upload: converting a media node to circle drops the media", async ({ page }) => {
+    const projectName = `Convert ${Date.now()}`;
+    await createAndOpenProject(page, projectName);
+
+    await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: `Add media for "${projectName}"` }).click();
+    await page.getByRole("dialog").locator('input[type="file"]').setInputFiles(fixturePng());
+    await expect(page.getByRole("button", { name: `Open image for "${projectName}"` })).toBeVisible();
+
+    await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: `Convert "${projectName}" to circle` }).click();
+    await page.getByRole("button", { name: "Convert" }).click();
+    await expect(page.getByRole("button", { name: `Open image for "${projectName}"` })).toHaveCount(0);
+    await expect(page.locator(".node-circle").first()).toBeVisible();
 });
 
 test("upload: invalid file shows an inline error and saves nothing", async ({ page }) => {
@@ -74,7 +92,6 @@ test("upload: disabled with notice when IndexedDB is unavailable", async ({ page
     await createAndOpenProject(page, projectName);
 
     await page.getByLabel(projectName, { exact: true }).click({ button: "right" });
-    await expect(page.getByRole("menuitem", { name: `Upload image for "${projectName}"` })).toBeDisabled();
 
     await page.getByRole("menuitem", { name: `Add media for "${projectName}"` }).click();
     await expect(page.getByText("Uploads need IndexedDB storage")).toBeVisible();

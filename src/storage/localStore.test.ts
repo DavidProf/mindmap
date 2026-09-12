@@ -40,7 +40,7 @@ import type { Node } from "../types/node";
 const STAMP = "2026-01-01T00:00:00.000Z";
 
 function node(id: string, projectId: string, parentId: string | null): Node {
-    return { id, projectId, parentId, text: id, kind: "circle", url: null, media: null, mediaFill: true, side: "south", collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+    return { id, projectId, parentId, text: id, kind: "circle", url: null, media: null, mediaFill: true, size: "small", side: "south", collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 function project(id: string, name: string, viewport: Viewport = { x: 0, y: 0, zoom: 1 }): Project {
@@ -288,11 +288,28 @@ describe("node media (13c)", () => {
         expect(out[0].media).toBeNull();
         expect(out[1].media).toEqual({ kind: "video", src: "https://example.com/v", uploadId: null });
     });
+    it("aligns kind with media: any media makes kind media, media kind without media reverts to note", () => {
+        const circleWithMedia = {
+            ...node("a", "p1", null),
+            media: { kind: "video" as const, src: "https://example.com/v", uploadId: null },
+        };
+        const noteWithMedia = {
+            ...node("b", "p1", null),
+            kind: "note" as const,
+            media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null },
+        };
+        const mediaKindBare = { ...node("c", "p1", null), kind: "media" as const, media: null };
+        const out = normalizeNodes([circleWithMedia, noteWithMedia, mediaKindBare]);
+        expect(out[0].kind).toBe("media");
+        expect(out[1].kind).toBe("media");
+        expect(out[2].kind).toBe("note");
+    });
     it("round-trips media through storage", () => {
         __resetForTests();
         stubWindow();
         const withMedia = {
             ...node("n1", "p1", null),
+            kind: "media" as const,
             media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null },
         };
         saveNodes([withMedia]);
@@ -315,7 +332,7 @@ describe("node upload media (13d)", () => {
         expect(validateNodeMediaPure("video", "", "blob-1")).toBe("Choose image or video.");
     });
     it("coerces missing uploadId to null without rewriting url media", () => {
-        const urlMedia = { ...node("u", "p1", null), media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null } };
+        const urlMedia = { ...node("u", "p1", null), kind: "media" as const, media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null } };
         expect(normalizeNodes([urlMedia])[0]).toBe(urlMedia);
     });
 });
@@ -338,6 +355,17 @@ describe("node media fill (13e)", () => {
         expect(out[0].mediaFill).toBe(true);
         expect(out[1].mediaFill).toBe(true);
     });
+    it("normalizes size: missing or invalid becomes small, valid value survives, unchanged nodes are not rewritten", () => {
+        const missing = node("a", "p1", null) as unknown as Record<string, unknown>;
+        delete missing.size;
+        const invalid = { ...node("b", "p1", null), size: "huge" };
+        const valid = { ...node("c", "p1", null), size: "medium" };
+        const out = normalizeNodes([missing, invalid, valid] as unknown as Node[]);
+        expect(out[0].size).toBe("small");
+        expect(out[1].size).toBe("small");
+        expect(out[2].size).toBe("medium");
+        expect(out[2]).toBe(valid);
+    });
     it("keeps explicit false only while media is attached", () => {
         const filled = {
             ...node("a", "p1", null),
@@ -358,6 +386,7 @@ describe("node media fill (13e)", () => {
     it("leaves already-normalized nodes untouched", () => {
         const kept = {
             ...node("a", "p1", null),
+            kind: "media" as const,
             media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null },
             mediaFill: false,
         };
@@ -368,6 +397,7 @@ describe("node media fill (13e)", () => {
         stubWindow();
         const off = {
             ...node("n1", "p1", null),
+            kind: "media" as const,
             media: { kind: "image" as const, src: "https://example.com/a.png", uploadId: null },
             mediaFill: false,
         };

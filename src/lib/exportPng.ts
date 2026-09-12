@@ -1,4 +1,6 @@
-import { NODE_DIAMETER, NOTE_HEIGHT, NOTE_WIDTH } from "./layout";
+import { NODE_DIAMETER, NODE_SIZE_PROFILES } from "./layout";
+import type { NodeSize } from "../types/node";
+import { normalizeNodeSizeValue } from "../types/node";
 import { TOKENS } from "../theme/tokens";
 import { youtubeShortlinkPure } from "./media";
 import { isMediaFilledPure } from "../types/node";
@@ -15,7 +17,13 @@ export const EXPORT_SHORTLINK_FONT_SIZE = 10;
 export const EXPORT_FONT_FAMILY = TOKENS.fontSans;
 export const MAX_EXPORT_SIDE = 4096;
 export const NOTE_MAX_CHARS_PER_LINE = 20;
-export const NOTE_MAX_LINES = 6;
+// Matches the canvas note clamp: 12px text, 1.35 line-height, 5 lines.
+export const NOTE_MAX_LINES = 5;
+const NOTE_FONT_SIZE = 12;
+const NOTE_LINE_HEIGHT = 1.35;
+// Rough average glyph width for the 12px sans at which the char budget meets
+// the canvas pixel width (rect minus 12px side padding).
+const NOTE_CHAR_WIDTH = 0.56 * NOTE_FONT_SIZE;
 export const NOTE_CORNER_RADIUS = 12;
 
 export type ExportBounds = {
@@ -110,9 +118,21 @@ export function wrapNoteLinesPure(text: string): string[] {
     return wrapLinesPure(text, NOTE_MAX_CHARS_PER_LINE, NOTE_MAX_LINES);
 }
 
-export function wrapExportTextPure(text: string, isNote: boolean, showPhoto: boolean): string[] {
-    if (showPhoto) return wrapLinesPure(text, NOTE_MAX_CHARS_PER_LINE, 3);
-    return isNote ? wrapNoteLinesPure(text) : wrapLinesPure(text);
+export function wrapExportTextPure(
+    text: string,
+    isNote: boolean,
+    showPhoto: boolean,
+    opts?: { charsPerLine?: number; maxLines?: number },
+): string[] {
+    if (showPhoto) return wrapLinesPure(text, opts?.charsPerLine ?? NOTE_MAX_CHARS_PER_LINE, 3);
+    if (isNote) return wrapLinesPure(text, opts?.charsPerLine ?? NOTE_MAX_CHARS_PER_LINE, opts?.maxLines ?? NOTE_MAX_LINES);
+    return wrapLinesPure(text);
+}
+
+// Note text wraps to the rect's pixel width on canvas; derive the char budget
+// per profile so a medium/large note wraps wider, not just taller.
+export function noteWrapCharsPerLinePure(width: number): number {
+    return Math.max(NOTE_MAX_CHARS_PER_LINE, Math.round((width - 24) / NOTE_CHAR_WIDTH));
 }
 
 // Cover-fit for full-bleed nodes: scale to fill, crop the overflow, center.
@@ -145,11 +165,12 @@ export function mediaBadgeCenterPure(
     cx: number,
     cy: number,
     scale: number,
+    size: NodeSize = "small",
 ): { x: number; y: number; radius: number } {
     // Straddles the top-left corner like the canvas badge: flush side,
     // half a radius below the top edge.
     const radius = MEDIA_BADGE_RADIUS * scale;
-    const rect = noteRectForExport(cx, cy, scale);
+    const rect = noteRectForExport(cx, cy, scale, size);
     return { x: rect.x + radius, y: rect.y + radius / 2, radius };
 }
 
@@ -162,10 +183,11 @@ export function linkBadgeCenterPure(
     cy: number,
     scale: number,
     kind: "circle" | "note",
+    size: NodeSize = "small",
 ): { x: number; y: number; radius: number } {
     const radius = LINK_BADGE_RADIUS * scale;
     if (kind === "note") {
-        const rect = noteRectForExport(cx, cy, scale);
+        const rect = noteRectForExport(cx, cy, scale, size);
         return { x: rect.x + rect.width - radius, y: rect.y + radius / 2, radius };
     }
     // Badge center on the rim at 45 degrees, straddling the circle edge
@@ -178,13 +200,10 @@ export function linkBadgeCenterPure(
     };
 }
 
-export function noteRectForExport(
-    cx: number,
-    cy: number,
-    scale: number,
-): { x: number; y: number; width: number; height: number } {
-    const width = NOTE_WIDTH * scale;
-    const height = NOTE_HEIGHT * scale;
+export function noteRectForExport(cx: number, cy: number, scale: number, size: NodeSize = "small"): { x: number; y: number; width: number; height: number } {
+    const profile = NODE_SIZE_PROFILES[size];
+    const width = profile.width * scale;
+    const height = profile.height * scale;
     return { x: cx - width / 2, y: cy - height / 2, width, height };
 }
 
@@ -192,8 +211,9 @@ export function mediaWellForExport(
     cx: number,
     cy: number,
     scale: number,
+    size: NodeSize = "small",
 ): { x: number; y: number; width: number; height: number } {
-    const rect = noteRectForExport(cx, cy, scale);
+    const rect = noteRectForExport(cx, cy, scale, size);
     const inset = 6 * scale;
     const height = rect.height * 0.42;
     return {
@@ -296,8 +316,9 @@ export function renderMapToCanvas(args: {
         const [cx, cy] = toPx(pos.x, pos.y);
         // Circles with media render as rectangles on canvas, mirroring layout.
         const isNote = node.kind === "note" || node.media != null;
+        const size = normalizeNodeSizeValue(node.size);
         if (isNote) {
-            const rect = noteRectForExport(cx, cy, scale);
+            const rect = noteRectForExport(cx, cy, scale, size);
             traceRoundRect(ctx, rect.x, rect.y, rect.width, rect.height, NOTE_CORNER_RADIUS * scale);
             ctx.fillStyle = EXPORT_NODE_FILL;
             ctx.fill();
@@ -319,7 +340,7 @@ export function renderMapToCanvas(args: {
         const filled = isNote && isMediaFilledPure(node);
         if (showPhoto && loadedImage && filled) {
             // Full-bleed: the image covers the whole node, no text, no well.
-            const rect = noteRectForExport(cx, cy, scale);
+            const rect = noteRectForExport(cx, cy, scale, size);
             const iw = loadedImage.naturalWidth;
             const ih = loadedImage.naturalHeight;
             const { dw, dh } = coverFitPure(iw, ih, rect.width, rect.height);
@@ -333,7 +354,7 @@ export function renderMapToCanvas(args: {
             ctx.lineWidth = 1 * scale;
             ctx.stroke();
         } else if (showPhoto && loadedImage) {
-            const well = mediaWellForExport(cx, cy, scale);
+            const well = mediaWellForExport(cx, cy, scale, size);
             const iw = loadedImage.naturalWidth;
             const ih = loadedImage.naturalHeight;
             const { dw, dh } = coverFitPure(iw, ih, well.width, well.height);
@@ -350,25 +371,32 @@ export function renderMapToCanvas(args: {
         // Filled nodes hide their text; a failed image load falls back to text
         // plus the badge placeholder so the node stays readable on paper.
         const hideText = filled && (showPhoto || node.media?.kind === "video");
-        const lines = hideText ? [] : wrapExportTextPure(node.text, isNote, showPhoto);
+        // Notes render 12px/1.35 on canvas; circles 13px/1.2. Mirror both.
+        const noteCharsPerLine = noteWrapCharsPerLinePure(NODE_SIZE_PROFILES[size].width);
+        const textFontSize = isNote ? NOTE_FONT_SIZE * scale : fontSize;
+        const lines = hideText
+            ? []
+            : wrapExportTextPure(node.text, isNote, showPhoto, isNote ? { charsPerLine: noteCharsPerLine, maxLines: NOTE_MAX_LINES } : undefined);
         if (lines.length > 0) {
             ctx.fillStyle = EXPORT_TEXT_COLOR;
-            const lineHeight = fontSize * 1.2;
-            const maxWidth = isNote ? NOTE_WIDTH * scale - 24 * scale : radius * 2 - 8 * scale;
+            const lineHeight = textFontSize * (isNote ? NOTE_LINE_HEIGHT : 1.2);
+            const maxWidth = isNote ? NODE_SIZE_PROFILES[size].width * scale - 24 * scale : radius * 2 - 8 * scale;
             let centerY = cy;
             if (showPhoto) {
-                const rect = noteRectForExport(cx, cy, scale);
-                const well = mediaWellForExport(cx, cy, scale);
+                const rect = noteRectForExport(cx, cy, scale, size);
+                const well = mediaWellForExport(cx, cy, scale, size);
                 centerY = (rect.y + 4 * scale + (well.y - 4 * scale)) / 2;
             }
             const startY = centerY - ((lines.length - 1) * lineHeight) / 2;
+            ctx.font = `${textFontSize}px ${EXPORT_FONT_FAMILY}`;
             for (let i = 0; i < lines.length; i++) {
                 ctx.fillText(lines[i], cx, startY + i * lineHeight, maxWidth);
             }
+            ctx.font = `${fontSize}px ${EXPORT_FONT_FAMILY}`;
         }
 
         if (shouldDrawLinkBadge(node.url)) {
-            const badge = linkBadgeCenterPure(cx, cy, scale, isNote ? "note" : "circle");
+            const badge = linkBadgeCenterPure(cx, cy, scale, isNote ? "note" : "circle", size);
             ctx.beginPath();
             ctx.arc(badge.x, badge.y, badge.radius, 0, Math.PI * 2);
             ctx.fillStyle = background;
@@ -420,7 +448,7 @@ export function renderMapToCanvas(args: {
         if (isNote && node.media?.kind === "video") {
             const shortlink = youtubeShortlinkPure(node.media.src);
             if (shortlink) {
-                const rect = noteRectForExport(cx, cy, scale);
+                const rect = noteRectForExport(cx, cy, scale, size);
                 ctx.fillStyle = EXPORT_MUTED_COLOR;
                 ctx.font = `${EXPORT_SHORTLINK_FONT_SIZE * scale}px ${EXPORT_FONT_FAMILY}`;
                 ctx.fillText(shortlink, cx, rect.y - 6 * scale, rect.width);

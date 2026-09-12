@@ -10,6 +10,7 @@ import {
     NOTE_MAX_CHARS_PER_LINE,
     NOTE_MAX_LINES,
     noteRectForExport,
+    noteWrapCharsPerLinePure,
     paddedExportBounds,
     resolveExportScale,
     shouldDrawLinkBadge,
@@ -18,7 +19,7 @@ import {
     wrapLinesPure,
     wrapNoteLinesPure,
 } from "./exportPng";
-import { NODE_DIAMETER, NOTE_HEIGHT, NOTE_WIDTH } from "./layout";
+import { NODE_DIAMETER, NODE_SIZE_PROFILES, NOTE_HEIGHT, NOTE_WIDTH } from "./layout";
 
 describe("buildExportFilename", () => {
     it("slugifies the project name", () => {
@@ -131,6 +132,26 @@ describe("note export helpers", () => {
         expect(rect.height).toBe(NOTE_HEIGHT * 2);
         expect(rect.x).toBe(100 - NOTE_WIDTH);
         expect(rect.y).toBe(50 - NOTE_HEIGHT);
+    });
+
+    it("matches note export wrap to the canvas: size-derived char budget, 5 lines", () => {
+        // Small note fits the canvas 12px text within 168 - 24 padding.
+        expect(noteWrapCharsPerLinePure(NOTE_WIDTH)).toBeGreaterThan(NOTE_MAX_CHARS_PER_LINE - 1);
+        // Medium and large notes wrap wider, matching their larger rects.
+        expect(noteWrapCharsPerLinePure(NODE_SIZE_PROFILES.medium.width)).toBeGreaterThan(noteWrapCharsPerLinePure(NOTE_WIDTH));
+        expect(noteWrapCharsPerLinePure(NODE_SIZE_PROFILES.large.width)).toBeGreaterThan(noteWrapCharsPerLinePure(NODE_SIZE_PROFILES.medium.width));
+    });
+
+    it("scales the export rect by node size profile (13f)", () => {
+        const small = noteRectForExport(100, 50, 1);
+        const medium = noteRectForExport(100, 50, 1, "medium");
+        const large = noteRectForExport(100, 50, 1, "large");
+        expect(medium.width).toBeGreaterThan(small.width);
+        expect(large.height).toBeGreaterThan(medium.height);
+        expect(large.width).toBe(NODE_SIZE_PROFILES.large.width);
+        // Small stays the historical footprint.
+        expect(small.width).toBe(NOTE_WIDTH);
+        expect(small.height).toBe(NOTE_HEIGHT);
     });
 });
 

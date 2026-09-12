@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { NOTE_HEIGHT, NOTE_WIDTH } from "../../lib/layout";
-import { isMediaFilledPure } from "../../types/node";
-import type { NodeMedia, NodeSide } from "../../types/node";
+import { NODE_SIZE_PROFILES } from "../../lib/layout";
+import { isMediaFilledPure, normalizeNodeSizeValue } from "../../types/node";
+import type { NodeMedia, NodeSide, NodeSize } from "../../types/node";
 import { inlineVideoKindPure, youtubeEmbedUrlPure } from "../../lib/media";
 import NodeEditor from "./NodeEditor";
 import NodeLinkBadge from "./NodeLinkBadge";
@@ -17,6 +17,7 @@ type NodeRectProps = {
     url: string | null;
     media: NodeMedia | null;
     mediaFill: boolean;
+    size: NodeSize;
     x: number;
     y: number;
     selected: boolean;
@@ -41,6 +42,7 @@ export default function NodeRect({
     url,
     media,
     mediaFill,
+    size,
     x,
     y,
     selected,
@@ -59,6 +61,11 @@ export default function NodeRect({
     hiddenCount,
 }: NodeRectProps) {
     const needsTooltip = text.length > 60;
+    // Circles keep the uniform diameter; the profile only shapes note rects.
+    const { width, height } = NODE_SIZE_PROFILES[normalizeNodeSizeValue(size)];
+    // The inline editor fills the rect instead of floating small inside a big one.
+    const editorWidth = width - 28;
+    const editorRows = size === "large" ? 9 : size === "medium" ? 6 : 4;
     const g = useNodeGestures({ id, selected, onSelect, onEditStart, onContextMenu });
     const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
     const uploadId = media?.uploadId ?? null;
@@ -78,10 +85,10 @@ export default function NodeRect({
             data-node-id={id}
             data-editing={editing ? "true" : undefined}
             style={{
-                left: x - NOTE_WIDTH / 2,
-                top: y - NOTE_HEIGHT / 2,
-                width: NOTE_WIDTH,
-                height: NOTE_HEIGHT,
+                left: x - width / 2,
+                top: y - height / 2,
+                width,
+                height,
             }}
         >
             <div
@@ -104,6 +111,8 @@ export default function NodeRect({
                         initialText={text}
                         maxLength={MAX_NOTE_TEXT_LENGTH}
                         multiline
+                        rows={editorRows}
+                        width={editorWidth}
                         onCommit={(value) => onCommitText(id, value)}
                         onCancel={() => onCancelEdit(id)}
                     />

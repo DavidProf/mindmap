@@ -11,7 +11,7 @@ function project(id: string): Project {
 }
 
 function node(id: string, projectId: string): Node {
-    return { id, projectId, parentId: null, text: id, kind: "circle", url: null, media: null, mediaFill: true, side: null, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+    return { id, projectId, parentId: null, text: id, kind: "circle", url: null, media: null, mediaFill: true, size: "small", side: null, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 describe("isIndexedDbSupported", () => {

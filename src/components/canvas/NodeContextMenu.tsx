@@ -1,6 +1,10 @@
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
-import type { NodeKind, NodeMedia } from "../../types/node";
+import type { NodeKind, NodeMedia, NodeSize } from "../../types/node";
+import { NODE_SIZES } from "../../types/node";
+
+// Convert targets are the non-media kinds; media arrives by attaching, not converting.
+const CONVERT_TARGETS: readonly NodeKind[] = ["circle", "note"];
 
 export type NodeMenuState = { x: number; y: number; nodeId: string };
 
@@ -11,6 +15,7 @@ type NodeContextMenuProps = {
     url: string | null;
     media: NodeMedia | null;
     mediaFill: boolean;
+    size: NodeSize;
     collapsed: boolean;
     hasChildren: boolean;
     isRoot: boolean;
@@ -24,8 +29,7 @@ type NodeContextMenuProps = {
     onOpenMedia: () => void;
     onRemoveMedia: () => void;
     onToggleMediaFill: () => void;
-    onUploadImage: () => void;
-    canUpload: boolean;
+    onSetSize: (size: NodeSize) => void;
     onToggleCollapse: () => void;
     onDelete: () => void;
 };
@@ -37,6 +41,7 @@ export default function NodeContextMenu({
     url,
     media,
     mediaFill,
+    size,
     collapsed,
     hasChildren,
     isRoot,
@@ -50,8 +55,7 @@ export default function NodeContextMenu({
     onOpenMedia,
     onRemoveMedia,
     onToggleMediaFill,
-    onUploadImage,
-    canUpload,
+    onSetSize,
     onToggleCollapse,
     onDelete,
 }: NodeContextMenuProps) {
@@ -97,23 +101,23 @@ export default function NodeContextMenu({
                     {mediaFill ? "\u2713 Fill node with media" : "Fill node with media"}
                 </MenuItem>
             )}
-            <MenuItem
-                onClick={onUploadImage}
-                disabled={!canUpload}
-                title={canUpload ? undefined : "Uploads need IndexedDB storage"}
-                aria-label={`Upload image for "${text}"`}
-            >
-                Upload image
-            </MenuItem>
-            {kind === "note" ? (
-                <MenuItem onClick={() => onConvert("circle")} aria-label={`Convert "${text}" to circle`}>
-                    Convert to circle
+            {(kind !== "circle") &&
+                NODE_SIZES.map((s) => (
+                    <MenuItem
+                        key={s}
+                        onClick={() => onSetSize(s)}
+                        role="menuitemcheckbox"
+                        aria-checked={size === s}
+                        aria-label={`Set node size ${s} for "${text}"`}
+                    >
+                        {size === s ? "\u2713" : "\u00a0\u00a0"} Node size: {s}
+                    </MenuItem>
+                ))}
+            {CONVERT_TARGETS.filter((t) => t !== kind).map((t) => (
+                <MenuItem key={t} onClick={() => onConvert(t)} aria-label={`Convert "${text}" to ${t}`}>
+                    Convert to {t}
                 </MenuItem>
-            ) : (
-                <MenuItem onClick={() => onConvert("note")} aria-label={`Convert "${text}" to note`}>
-                    Convert to note
-                </MenuItem>
-            )}
+            ))}
             <MenuItem
                 onClick={onToggleCollapse}
                 disabled={!hasChildren}

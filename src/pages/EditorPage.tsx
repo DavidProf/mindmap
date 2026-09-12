@@ -14,6 +14,7 @@ import {
     setNodeMediaFillAsync,
     setNodeKindAsync,
     setNodeMediaAsync,
+    setNodeSizeAsync,
     setNodeUrlAsync,
     updateNodeTextAsync,
 } from "../storage/operations";
@@ -25,7 +26,7 @@ import { computeLayout } from "../lib/layout";
 import { exportMapAsPng, paddedExportBounds, renderMapToCanvas, resolveExportScale } from "../lib/exportPng";
 import { loadExportMediaImages, mediaLoadWarningPure, revokeExportObjectUrls } from "../lib/media";
 import type { Project, Viewport } from "../types/project";
-import type { Node, NodeKind, NodeMedia, NodeSide } from "../types/node";
+import type { Node, NodeKind, NodeMedia, NodeSide, NodeSize } from "../types/node";
 import "./EditorPage.css";
 
 export default function EditorPage() {
@@ -186,7 +187,12 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
 
     async function handleSetKind(nodeId: string, kind: NodeKind, opts?: { allowTruncate?: boolean }): Promise<Node | null> {
         try {
+            // Converting away from media drops it; clean up the orphaned blob.
+            const previousUploadId = nodes?.find((n) => n.id === nodeId)?.media?.uploadId ?? null;
             const updated = await setNodeKindAsync(backend, nodeId, kind, opts);
+            if (previousUploadId && updated.media === null) {
+                await blobStore.deleteBlob(previousUploadId).catch(() => undefined);
+            }
             await refreshNodes();
             setError(null);
             return updated;
@@ -234,6 +240,18 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
     async function handleSetMediaFill(nodeId: string, fill: boolean): Promise<Node | null> {
         try {
             const updated = await setNodeMediaFillAsync(backend, nodeId, fill);
+            await refreshNodes();
+            setError(null);
+            return updated;
+        } catch (e) {
+            setError(toEditorError(e, "Could not update the node."));
+            return null;
+        }
+    }
+
+    async function handleSetSize(nodeId: string, size: NodeSize): Promise<Node | null> {
+        try {
+            const updated = await setNodeSizeAsync(backend, nodeId, size);
             await refreshNodes();
             setError(null);
             return updated;
@@ -460,6 +478,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
                     onSetUrl={handleSetUrl}
                     onSetMedia={handleSetMedia}
                     onSetMediaFill={handleSetMediaFill}
+                    onSetSize={handleSetSize}
                     onUploadMedia={(nodeId, file) => handleUploadMedia(nodeId, file)}
                     loadBlob={loadBlob}
                     canUpload={canUpload}

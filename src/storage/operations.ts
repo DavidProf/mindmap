@@ -1,5 +1,5 @@
-import type { Node, NodeKind, NodeMedia, NodeSide } from "../types/node";
-import { isNodeKind, isNodeSide, normalizeNodes } from "../types/node";
+import type { Node, NodeKind, NodeMedia, NodeSide, NodeSize } from "../types/node";
+import { isMediaNodeKind, isNodeKind, isNodeSide, normalizeNodeSizeValue, normalizeNodes } from "../types/node";
 import type { Project, Viewport } from "../types/project";
 import type { StorageBackend } from "./backend";
 import type { MediaBlobStore } from "./mediaBlobs";
@@ -76,6 +76,7 @@ export async function createProjectAsync(backend: StorageBackend, name: string):
         url: null,
         media: null,
         mediaFill: true,
+        size: "small",
         side: null,
         collapsed: false,
         createdAt: now,
@@ -158,6 +159,7 @@ export async function addChildNodeAsync(
         url: null,
         media: null,
         mediaFill: true,
+        size: "small",
         side,
         collapsed: false,
         createdAt: now,
@@ -213,7 +215,18 @@ export async function setNodeKindAsync(
         if (!opts?.allowTruncate) throw new Error(`Text exceeds ${MAX_NODE_TEXT_LENGTH} characters; confirm truncation to convert.`);
         text = text.trim().slice(0, MAX_NODE_TEXT_LENGTH);
     }
-    const updated: Node = { ...nodes[idx], kind, text, updatedAt: bumpedIso(nodes[idx].updatedAt) };
+    if (isMediaNodeKind(kind)) throw new Error("Attach media to make a media node.");
+    // Media converts away with the kind: a media node becoming circle or note
+    // drops its media, since media is what makes the node a media node.
+    const dropMedia = isMediaNodeKind(nodes[idx].kind) && nodes[idx].media !== null;
+    const updated: Node = {
+        ...nodes[idx],
+        kind,
+        text,
+        media: dropMedia ? null : nodes[idx].media,
+        mediaFill: dropMedia ? true : nodes[idx].mediaFill,
+        updatedAt: bumpedIso(nodes[idx].updatedAt),
+    };
     nodes[idx] = updated;
     await backend.saveNodes(nodes);
 
@@ -275,7 +288,19 @@ export async function setNodeMediaAsync(
 
     // Attaching media or clearing it resets fill to the default; editing keeps the choice.
     const nextMediaFill = nextMedia !== null && prevMedia !== null ? nodes[idx].mediaFill : true;
-    const updated: Node = { ...nodes[idx], media: nextMedia, mediaFill: nextMediaFill, updatedAt: bumpedIso(nodes[idx].updatedAt) };
+    // Media nodes carry their media: attaching names the kind, clearing reverts to note.
+    const nextKind = nextMedia !== null ? ("media" as const) : isMediaNodeKind(nodes[idx].kind) ? ("note" as const) : nodes[idx].kind;
+    // Fresh attach on a small node: media reads too tight at the base footprint.
+    const currentSize = normalizeNodeSizeValue(nodes[idx].size);
+    const autoSize = nextMedia !== null && prevMedia === null && currentSize === "small" ? ("medium" as const) : currentSize;
+    const updated: Node = {
+        ...nodes[idx],
+        kind: nextKind,
+        media: nextMedia,
+        mediaFill: nextMediaFill,
+        size: autoSize,
+        updatedAt: bumpedIso(nodes[idx].updatedAt),
+    };
     nodes[idx] = updated;
     await backend.saveNodes(nodes);
 
@@ -297,6 +322,26 @@ export async function setNodeMediaFillAsync(backend: StorageBackend, nodeId: str
     if (nodes[idx].mediaFill === fill) return nodes[idx];
 
     const updated: Node = { ...nodes[idx], mediaFill: fill, updatedAt: bumpedIso(nodes[idx].updatedAt) };
+    nodes[idx] = updated;
+    await backend.saveNodes(nodes);
+
+    const projects = await backend.loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
+    if (pIdx !== -1) {
+        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+        await backend.saveProjects(projects);
+        mirrorToLocalStorage(projects, nodes);
+    }
+    return updated;
+}
+
+export async function setNodeSizeAsync(backend: StorageBackend, nodeId: string, size: NodeSize): Promise<Node> {
+    const nodes = normalizeNodes(await backend.loadNodes());
+    const idx = nodes.findIndex((n) => n.id === nodeId);
+    if (idx === -1) throw new Error("Node not found.");
+    if (nodes[idx].size === size) return nodes[idx];
+
+    const updated: Node = { ...nodes[idx], size, updatedAt: bumpedIso(nodes[idx].updatedAt) };
     nodes[idx] = updated;
     await backend.saveNodes(nodes);
 

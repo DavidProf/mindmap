@@ -7,11 +7,13 @@ type NodeEditorProps = {
     initialText: string;
     maxLength?: number;
     multiline?: boolean;
+    rows?: number;
+    width?: number;
     onCommit: (text: string) => void;
     onCancel: () => void;
 };
 
-export default function NodeEditor({ nodeId, initialText, maxLength = MAX_NODE_TEXT_LENGTH, multiline = false, onCommit, onCancel }: NodeEditorProps) {
+export default function NodeEditor({ nodeId, initialText, maxLength = MAX_NODE_TEXT_LENGTH, multiline = false, rows = 4, width, onCommit, onCancel }: NodeEditorProps) {
     const [draft, setDraft] = useState(initialText);
     const inputRef = useRef<HTMLInputElement>(null);
     const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -44,7 +46,8 @@ export default function NodeEditor({ nodeId, initialText, maxLength = MAX_NODE_T
                     aria-label="Edit node text"
                     value={draft}
                     maxLength={maxLength}
-                    rows={4}
+                    rows={rows}
+                    style={width ? { width } : undefined}
                     onChange={(e) => setDraft(e.target.value.slice(0, maxLength))}
                     onKeyDown={(e) => {
                         e.stopPropagation();

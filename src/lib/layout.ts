@@ -1,11 +1,12 @@
 // Radial tidy-tree layout - stateless, pure, no DOM.
 // Root centers at (0,0); branches grow toward N/E/S/W by Node.side.
 // Same-side siblings fan out across their side quadrant, weighted by
-// visible leaf count. Circles use NODE_DIAMETER; notes and media nodes use
-// NOTE_WIDTH x NOTE_HEIGHT with bounding-circle clearance so mixed maps separate.
+// visible leaf count. Circles use NODE_DIAMETER; note-kind nodes (note and
+// media) use their NODE_SIZE_PROFILES footprint with bounding-circle
+// clearance so mixed maps separate.
 
-import type { Node, NodeKind, NodeSide } from "../types/node";
-import { isNodeSide } from "../types/node";
+import type { Node, NodeKind, NodeSide, NodeSize } from "../types/node";
+import { isNodeSide, normalizeNodeSizeValue } from "../types/node";
 
 export const NODE_DIAMETER = 88;
 export const NOTE_WIDTH = 168;
@@ -13,25 +14,46 @@ export const NOTE_HEIGHT = 104;
 export const GAP_X = 32;
 export const GAP_Y = 72;
 
+// Per-size note footprints. Small is the historical rect; medium and large
+// scale it for emphasis. Single source for layout, canvas, and export.
+export const NODE_SIZE_PROFILES: Record<NodeSize, { width: number; height: number }> = {
+    small: { width: NOTE_WIDTH, height: NOTE_HEIGHT },
+    medium: { width: Math.round(NOTE_WIDTH * 1.4), height: Math.round(NOTE_HEIGHT * 1.4) },
+    large: { width: Math.round(NOTE_WIDTH * 1.8), height: Math.round(NOTE_HEIGHT * 1.8) },
+};
+
+// Size only affects note-kind footprints; callers pass it alongside kindOf.
+export function nodeSizeOf(node: Node | undefined): NodeSize {
+    return node ? normalizeNodeSizeValue(node.size) : "small";
+}
+
 function hasMedia(node: Node | undefined): boolean {
     const media = node?.media;
     return typeof media === "object" && media !== null;
 }
 
 function kindOf(node: Node | undefined): NodeKind {
-    if (node?.kind === "note" || hasMedia(node)) return "note";
+    // Every non-circle kind (note, image, video) shares the note footprint.
+    if (node && node.kind !== "circle") return "note";
+    if (hasMedia(node)) return "note";
     return "circle";
 }
 
 // Bounding-circle radius per kind: circles use their radius, notes use
 // the half-diagonal so rotation-proof clearance holds in every direction.
-export function nodeRadius(kind: NodeKind, diameter: number = NODE_DIAMETER): number {
-    if (kind === "note") return Math.hypot(NOTE_WIDTH, NOTE_HEIGHT) / 2;
+export function nodeRadius(kind: NodeKind, size: NodeSize = "small", diameter: number = NODE_DIAMETER): number {
+    if (kind === "note") {
+        const { width, height } = NODE_SIZE_PROFILES[size];
+        return Math.hypot(width, height) / 2;
+    }
     return diameter / 2;
 }
 
-export function nodeHalfExtents(kind: NodeKind, diameter: number = NODE_DIAMETER): { rx: number; ry: number } {
-    if (kind === "note") return { rx: NOTE_WIDTH / 2, ry: NOTE_HEIGHT / 2 };
+export function nodeHalfExtents(kind: NodeKind, size: NodeSize = "small", diameter: number = NODE_DIAMETER): { rx: number; ry: number } {
+    if (kind === "note") {
+        const { width, height } = NODE_SIZE_PROFILES[size];
+        return { rx: width / 2, ry: height / 2 };
+    }
     return { rx: diameter / 2, ry: diameter / 2 };
 }
 
@@ -137,7 +159,7 @@ export function computeLayout(
     // room without moving circle-only maps (max radius 44 keeps step).
     let maxVisibleRadius = diameter / 2;
     for (const id of visibleIds) {
-        const r = nodeRadius(kindOf(nodeById.get(id)), diameter);
+        const r = nodeRadius(kindOf(nodeById.get(id)), nodeSizeOf(nodeById.get(id)), diameter);
         if (r > maxVisibleRadius) maxVisibleRadius = r;
     }
     const step = maxVisibleRadius * 2 + gapY;
@@ -167,11 +189,12 @@ export function computeLayout(
     const toRad = Math.PI / 180;
 
     function radiusOf(id: string): number {
-        return nodeRadius(kindOf(nodeById.get(id)), diameter);
+        const n = nodeById.get(id);
+        return nodeRadius(kindOf(n), nodeSizeOf(n), diameter);
     }
 
-    function clashes(x: number, y: number, kind: NodeKind): boolean {
-        const r = nodeRadius(kind, diameter);
+    function clashes(x: number, y: number, kind: NodeKind, size: NodeSize): boolean {
+        const r = nodeRadius(kind, size, diameter);
         for (const [id, p] of positions) {
             if (Math.hypot(p.x - x, p.y - y) < r + radiusOf(id)) return true;
         }
@@ -204,9 +227,9 @@ export function computeLayout(
     // True when edge parent→q crosses no placed edge and keeps
     // bounding-radius clearance between q and placed edges and between
     // placed nodes and itself.
-    function edgeClean(parentId: string, px: number, py: number, q: Position, qKind: NodeKind): boolean {
+    function edgeClean(parentId: string, px: number, py: number, q: Position, qKind: NodeKind, qSize: NodeSize): boolean {
         const p = { x: px, y: py };
-        const qR = nodeRadius(qKind, diameter);
+        const qR = nodeRadius(qKind, qSize, diameter);
         for (const e of placedEdges) {
             if (e.from === parentId || e.to === parentId) continue;
             const a = positions.get(e.from);
@@ -222,12 +245,12 @@ export function computeLayout(
         return true;
     }
 
-    function resolveOverlap(px: number, py: number, x: number, y: number, kind: NodeKind): Position {
+    function resolveOverlap(px: number, py: number, x: number, y: number, kind: NodeKind, size: NodeSize): Position {
         // A branch can fold back onto placed nodes (e.g. a west child of an
         // east node lands on the root). Push outward along the same ray until
         // clear so every pair stays at least the sum of radii apart.
         for (let i = 0; i < 50; i++) {
-            if (!clashes(x, y, kind)) return { x, y };
+            if (!clashes(x, y, kind, size)) return { x, y };
             const dx = x - px;
             const dy = y - py;
             const len = Math.hypot(dx, dy) || 1;
@@ -246,12 +269,12 @@ export function computeLayout(
     // same ray can never make the child nearer its parent than its
     // grandparent, so rotate around the parent instead and take the finest
     // bearing that is clash-free with the parent still nearest.
-    function placeReadable(parentId: string, px: number, py: number, baseAngle: number, kind: NodeKind): Position {
+    function placeReadable(parentId: string, px: number, py: number, baseAngle: number, kind: NodeKind, size: NodeSize): Position {
         for (const deg of FINE_DEGS) {
             const a = baseAngle + deg * toRad;
             const x = px + step * Math.cos(a);
             const y = py + step * Math.sin(a);
-            if (clashes(x, y, kind)) continue;
+            if (clashes(x, y, kind, size)) continue;
             let nearest = true;
             for (const p of positions.values()) {
                 if (p.x === px && p.y === py) continue;
@@ -261,30 +284,30 @@ export function computeLayout(
                 }
             }
             if (!nearest) continue;
-            if (!edgeClean(parentId, px, py, { x, y }, kind)) continue;
+            if (!edgeClean(parentId, px, py, { x, y }, kind, size)) continue;
             return { x, y };
         }
         const raw = { x: px + step * Math.cos(baseAngle), y: py + step * Math.sin(baseAngle) };
-        return resolveOverlap(px, py, raw.x, raw.y, kind);
+        return resolveOverlap(px, py, raw.x, raw.y, kind, size);
     }
 
     // Repair for placements whose straight edge would cross a placed edge or
     // crowd a corridor. For each bearing, finest first, push out along that
     // ray to the smallest clash-free radius before accepting it, so direction
     // bends as little as readability allows.
-    function placeSeparated(parentId: string, px: number, py: number, baseAngle: number, kind: NodeKind): Position {
+    function placeSeparated(parentId: string, px: number, py: number, baseAngle: number, kind: NodeKind, size: NodeSize): Position {
         const gpId = parentById.get(parentId) ?? null;
         const gp = gpId ? positions.get(gpId) : undefined;
         for (const deg of FINE_DEGS) {
             const a = baseAngle + deg * toRad;
             const raw = { x: px + step * Math.cos(a), y: py + step * Math.sin(a) };
-            const q = resolveOverlap(px, py, raw.x, raw.y, kind);
+            const q = resolveOverlap(px, py, raw.x, raw.y, kind, size);
             if (gp && Math.hypot(q.x - gp.x, q.y - gp.y) < Math.hypot(q.x - px, q.y - py) - 1e-6) continue;
-            if (!edgeClean(parentId, px, py, q, kind)) continue;
+            if (!edgeClean(parentId, px, py, q, kind, size)) continue;
             return q;
         }
         const raw = { x: px + step * Math.cos(baseAngle), y: py + step * Math.sin(baseAngle) };
-        return resolveOverlap(px, py, raw.x, raw.y, kind);
+        return resolveOverlap(px, py, raw.x, raw.y, kind, size);
     }
 
     function placeChildren(parentId: string, px: number, py: number): void {
@@ -316,12 +339,13 @@ export function computeLayout(
                 const gpId = parentById.get(parentId) ?? null;
                 const gp = gpId ? positions.get(gpId) : undefined;
                 const childKind = kindOf(child);
+                const childSize = nodeSizeOf(child);
                 const raw = { x: px + step * Math.cos(angle), y: py + step * Math.sin(angle) };
                 let pos =
                     gp && Math.hypot(raw.x - gp.x, raw.y - gp.y) < step + 1e-9
-                        ? placeReadable(parentId, px, py, angle, childKind)
-                        : resolveOverlap(px, py, raw.x, raw.y, childKind);
-                if (!edgeClean(parentId, px, py, pos, childKind)) pos = placeSeparated(parentId, px, py, angle, childKind);
+                        ? placeReadable(parentId, px, py, angle, childKind, childSize)
+                        : resolveOverlap(px, py, raw.x, raw.y, childKind, childSize);
+                if (!edgeClean(parentId, px, py, pos, childKind, childSize)) pos = placeSeparated(parentId, px, py, angle, childKind, childSize);
                 positions.set(child.id, pos);
                 placedEdges.push({ from: parentId, to: child.id });
                 acc += w;
@@ -356,7 +380,7 @@ export function computeLayout(
         maxY = 0;
     } else {
         for (const [id, p] of positions) {
-            const { rx, ry } = nodeHalfExtents(kindOf(nodeById.get(id)), diameter);
+            const { rx, ry } = nodeHalfExtents(kindOf(nodeById.get(id)), nodeSizeOf(nodeById.get(id)), diameter);
             minX = Math.min(minX, p.x - rx);
             maxX = Math.max(maxX, p.x + rx);
             minY = Math.min(minY, p.y - ry);

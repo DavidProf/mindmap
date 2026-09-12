@@ -169,7 +169,8 @@ export const MAX_NODE_TEXT_LENGTH = 30;
 export const MAX_NOTE_TEXT_LENGTH = 280;
 
 export function maxTextLengthForKind(kind: unknown): number {
-    return isNodeKind(kind) && kind === "note" ? MAX_NOTE_TEXT_LENGTH : MAX_NODE_TEXT_LENGTH;
+    // Media nodes carry note-like alias text inside the rect footprint.
+    return isNodeKind(kind) && kind !== "circle" ? MAX_NOTE_TEXT_LENGTH : MAX_NODE_TEXT_LENGTH;
 }
 
 export function validateNodeTextPure(raw: string, kind: NodeKind = "circle"): string | null {

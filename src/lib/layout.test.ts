@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { computeLayout, GAP_X, GAP_Y, NODE_DIAMETER, NOTE_HEIGHT, NOTE_WIDTH, nodeRadius } from "./layout";
+import { computeLayout, GAP_X, GAP_Y, NODE_DIAMETER, NODE_SIZE_PROFILES, NOTE_HEIGHT, NOTE_WIDTH, nodeRadius } from "./layout";
 import type { Node, NodeKind, NodeSide } from "../types/node";
 
 const STAMP = "2026-01-01T00:00:00.000Z";
 
 function node(id: string, parentId: string | null, side: NodeSide | null = "south", kind: NodeKind = "circle"): Node {
-    return { id, projectId: "p", parentId, text: id, kind, url: null, media: null, mediaFill: true, side, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
+    return { id, projectId: "p", parentId, text: id, kind, url: null, media: null, mediaFill: true, size: "small", side, collapsed: false, createdAt: STAMP, updatedAt: STAMP };
 }
 
 function dist(a: { x: number; y: number }, b: { x: number; y: number }): number {
@@ -213,6 +213,27 @@ describe("computeLayout", () => {
         expect(nodeRadius("circle")).toBe(NODE_DIAMETER / 2);
         expect(nodeRadius("note")).toBeCloseTo(Math.hypot(NOTE_WIDTH, NOTE_HEIGHT) / 2, 10);
         expect(nodeRadius("note")).toBeGreaterThan(nodeRadius("circle"));
+    });
+
+    it("scales note radii by size profile and ignores size for circles", () => {
+        expect(nodeRadius("note", "medium")).toBeGreaterThan(nodeRadius("note", "small"));
+        expect(nodeRadius("note", "large")).toBeGreaterThan(nodeRadius("note", "medium"));
+        expect(nodeRadius("circle", "large")).toBe(NODE_DIAMETER / 2);
+        const med = NODE_SIZE_PROFILES.medium;
+        expect(nodeRadius("note", "medium")).toBeCloseTo(Math.hypot(med.width, med.height) / 2, 10);
+    });
+
+    it("gives a large note more clearance than a small one and pads bounds by its footprint", () => {
+        const nodes = [node("root", null), node("child", "root", "east", "note")];
+        const small = computeLayout(nodes, "root");
+        const big = computeLayout(nodes.map((n) => (n.id === "child" ? { ...n, size: "large" as const } : n)), "root");
+        const child = big.positions.get("child")!;
+        // Root is a circle at origin: parent-child distance must cover both radii.
+        expect(Math.hypot(child.x, child.y)).toBeGreaterThanOrEqual(nodeRadius("circle") + nodeRadius("note", "large") - 1e-6);
+        expect(big.bounds.width).toBeGreaterThanOrEqual(NODE_SIZE_PROFILES.large.width);
+        expect(big.bounds.height).toBeGreaterThanOrEqual(NODE_SIZE_PROFILES.large.height);
+        expect(big.bounds.width).toBeGreaterThan(small.bounds.width);
+        expect(big.bounds.height).toBeGreaterThan(small.bounds.height);
     });
 
     it("separates mixed circle and note nodes by summed radii", () => {

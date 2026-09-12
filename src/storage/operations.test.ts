@@ -13,6 +13,7 @@ import {
     setNodeKindAsync,
     setNodeMediaAsync,
     setNodeMediaFillAsync,
+    setNodeSizeAsync,
     setNodeUrlAsync,
     setViewportAsync,
     updateNodeTextAsync,
@@ -343,6 +344,44 @@ describe("node url (13b)", () => {
         expect(cleared.media).toBeNull();
         expect(cleared.mediaFill).toBe(true);
     });
+    it("auto-sets medium on fresh media attach to a small node, keeps size on edit, clear, and medium nodes (13f)", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const attached = await setNodeMediaAsync(backend, child.id, { kind: "image", src: "https://example.com/a.png", uploadId: null });
+        expect(attached.size).toBe("medium");
+        // Editing media in place keeps the auto-set size.
+        const edited = await setNodeMediaAsync(backend, child.id, { kind: "image", src: "https://example.com/b.png", uploadId: null });
+        expect(edited.size).toBe("medium");
+        const cleared = await setNodeMediaAsync(backend, child.id, null);
+        expect(cleared.size).toBe("medium");
+        // A node already large stays large on attach.
+        await setNodeSizeAsync(backend, child.id, "large");
+        const reattached = await setNodeMediaAsync(backend, child.id, { kind: "image", src: "https://example.com/c.png", uploadId: null });
+        expect(reattached.size).toBe("large");
+    });
+    it("sets node size and persists it (13f)", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const medium = await setNodeSizeAsync(backend, child.id, "medium");
+        expect(medium.size).toBe("medium");
+        const stored = (await backend.loadNodes()).find((n) => n.id === child.id)!;
+        expect(stored.size).toBe("medium");
+        const again = await setNodeSizeAsync(backend, child.id, "medium");
+        expect(again).toBe(medium);
+        await expect(setNodeSizeAsync(backend, "missing", "large")).rejects.toThrow("Node not found.");
+    });
+    it("sets kind media on attach and reverts to note on clear (media kind)", async () => {
+        const backend = createMemoryBackend();
+        const project = await createProjectAsync(backend, "Alpha");
+        const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
+        const attached = await setNodeMediaAsync(backend, child.id, { kind: "image", src: "https://example.com/a.png", uploadId: null });
+        expect(attached.kind).toBe("media");
+        const cleared = await setNodeMediaAsync(backend, child.id, null);
+        expect(cleared.kind).toBe("note");
+        await expect(setNodeKindAsync(backend, child.id, "media")).rejects.toThrow("Attach media");
+    });
     it("toggles media fill only on nodes with media (13e)", async () => {
         const backend = createMemoryBackend();
         const project = await createProjectAsync(backend, "Alpha");
@@ -373,15 +412,17 @@ describe("node url (13b)", () => {
             setNodeMediaAsync(backend, "missing", { kind: "video", src: "https://example.com/v.mp4", uploadId: null }),
         ).rejects.toThrow("Node not found.");
     });
-    it("preserves media across kind convert and url set", async () => {
+    it("drops media when converting away from the media kind, keeps it across url set", async () => {
         const backend = createMemoryBackend();
         const project = await createProjectAsync(backend, "Alpha");
         const child = await addChildNodeAsync(backend, project.id, project.rootNodeId, "Kid", "south");
         await setNodeMediaAsync(backend, child.id, { kind: "video", src: "https://example.com/v.mp4", uploadId: null });
+        // Converting the media node away drops its media: media is the kind.
         const note = await setNodeKindAsync(backend, child.id, "note");
-        expect(note.media).toEqual({ kind: "video", src: "https://example.com/v.mp4", uploadId: null });
+        expect(note.kind).toBe("note");
+        expect(note.media).toBeNull();
         const linked = await setNodeUrlAsync(backend, child.id, "https://example.com");
-        expect(linked.media).toEqual({ kind: "video", src: "https://example.com/v.mp4", uploadId: null });
+        expect(linked.media).toBeNull();
     });
     it("sets and clears upload media with project bump", async () => {
         const backend = createMemoryBackend();

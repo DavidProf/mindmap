@@ -6,9 +6,15 @@ export function isNodeSide(value: unknown): value is NodeSide {
     return typeof value === "string" && (NODE_SIDES as readonly string[]).includes(value);
 }
 
-export const NODE_KINDS = ["circle", "note"] as const;
+export const NODE_KINDS = ["circle", "note", "media"] as const;
 
 export type NodeKind = (typeof NODE_KINDS)[number];
+
+// The media kind carries its media (image or video) in Node.media and renders
+// with the note footprint. It is set by attaching media, not by convert.
+export function isMediaNodeKind(kind: NodeKind): boolean {
+    return kind === "media";
+}
 
 export function isNodeKind(value: unknown): value is NodeKind {
     return typeof value === "string" && (NODE_KINDS as readonly string[]).includes(value);
@@ -40,6 +46,19 @@ export function normalizeNodeUrlValue(value: unknown): string | null {
     const href = parsed.href;
     if (href.length === 0 || href.length > MAX_URL_LENGTH) return null;
     return href;
+}
+
+export const NODE_SIZES = ["small", "medium", "large"] as const;
+
+export type NodeSize = (typeof NODE_SIZES)[number];
+
+export function isNodeSize(value: unknown): value is NodeSize {
+    return typeof value === "string" && (NODE_SIZES as readonly string[]).includes(value);
+}
+
+// Missing or invalid stored values fall back to small, the historical footprint.
+export function normalizeNodeSizeValue(value: unknown): NodeSize {
+    return isNodeSize(value) ? value : "small";
 }
 
 export const NODE_MEDIA_KINDS = ["image", "video"] as const;
@@ -82,6 +101,7 @@ export type Node = {
     url: string | null;
     media: NodeMedia | null;
     mediaFill: boolean;
+    size: NodeSize;
     side: NodeSide | null;
     collapsed: boolean;
     createdAt: string;
@@ -101,13 +121,15 @@ export function isMediaFilledPure(node: Pick<Node, "media" | "mediaFill">): bool
 export function normalizeNodes(nodes: Node[]): Node[] {
     let changed = false;
     const out = nodes.map((n) => {
-        const wantKind = isNodeKind(n.kind) ? n.kind : ("circle" as NodeKind);
         const rawUrl = (n as unknown as Record<string, unknown>).url;
         const wantUrl = normalizeNodeUrlValue(rawUrl);
         const hasUrlField = Object.prototype.hasOwnProperty.call(n, "url");
         const rawMedia = (n as unknown as Record<string, unknown>).media;
         const wantMedia = normalizeNodeMediaValue(rawMedia);
         const hasMediaField = Object.prototype.hasOwnProperty.call(n, "media");
+        // Media nodes carry their media: any node with media is kind "media".
+        const rawKind = isNodeKind(n.kind) ? n.kind : ("circle" as NodeKind);
+        const wantKind = wantMedia !== null ? ("media" as const) : isMediaNodeKind(rawKind) ? ("note" as NodeKind) : rawKind;
         const wantMediaFill = normalizeNodeMediaFill((n as unknown as Record<string, unknown>).mediaFill, wantMedia !== null);
         const prevMedia = (n as Node).media;
         const prevUploadId = prevMedia?.uploadId ?? null;
@@ -120,10 +142,22 @@ export function normalizeNodes(nodes: Node[]): Node[] {
                   prevMedia.kind === wantMedia.kind &&
                   prevMedia.src === wantMedia.src &&
                   prevUploadId === wantUploadId;
-        if (wantKind === n.kind && hasUrlField && (n as Node).url === wantUrl && hasMediaField && mediaSame && n.mediaFill === wantMediaFill)
+        const rawSize = (n as unknown as Record<string, unknown>).size;
+        const wantSize = normalizeNodeSizeValue(rawSize);
+        const hasSizeField = Object.prototype.hasOwnProperty.call(n, "size");
+        if (
+            wantKind === n.kind &&
+            hasUrlField &&
+            (n as Node).url === wantUrl &&
+            hasMediaField &&
+            mediaSame &&
+            n.mediaFill === wantMediaFill &&
+            hasSizeField &&
+            n.size === wantSize
+        )
             return n;
         changed = true;
-        return { ...n, kind: wantKind, url: wantUrl, media: wantMedia, mediaFill: wantMediaFill };
+        return { ...n, kind: wantKind, url: wantUrl, media: wantMedia, mediaFill: wantMediaFill, size: wantSize };
     });
     return changed ? out : nodes;
 }

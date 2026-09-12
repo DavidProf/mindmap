@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Node, NodeKind, NodeMedia, NodeSide } from "../../types/node";
+import type { Node, NodeKind, NodeMedia, NodeSide, NodeSize } from "../../types/node";
 import type { Viewport } from "../../types/project";
 import type { Position } from "../../lib/layout";
 import { countSubtreeNodesPure, getSubtreeCountsPure, MAX_NODE_TEXT_LENGTH } from "../../storage/localStore";
@@ -17,7 +17,7 @@ import NodeDeleteDialog from "./NodeDeleteDialog";
 import type { NodeDeleteTarget } from "./NodeDeleteDialog";
 import NodeLinkDialog from "./NodeLinkDialog";
 import type { NodeLinkTarget } from "./NodeLinkDialog";
-import NodeMediaDialog, { UPLOAD_ACCEPT } from "./NodeMediaDialog";
+import NodeMediaDialog from "./NodeMediaDialog";
 import type { NodeMediaTarget } from "./NodeMediaDialog";
 import { openNodeUrl } from "../../lib/link";
 import "./TreeCanvas.css";
@@ -38,6 +38,7 @@ type TreeCanvasProps = {
     onSetUrl?: (nodeId: string, url: string | null) => Promise<Node | null>;
     onSetMedia?: (nodeId: string, media: NodeMedia | null) => Promise<Node | null>;
     onSetMediaFill?: (nodeId: string, fill: boolean) => Promise<Node | null>;
+    onSetSize?: (nodeId: string, size: NodeSize) => Promise<Node | null>;
     onUploadMedia?: (nodeId: string, file: File) => Promise<string | null>;
     loadBlob?: (uploadId: string) => Promise<Blob | null>;
     canUpload?: boolean;
@@ -45,13 +46,11 @@ type TreeCanvasProps = {
     onDeleteSubtree?: (nodeId: string) => Promise<{ deletedIds: string[] } | null>;
 };
 
-export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onSetUrl, onSetMedia, onSetMediaFill, onUploadMedia, loadBlob, canUpload, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
+export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onSetUrl, onSetMedia, onSetMediaFill, onSetSize, onUploadMedia, loadBlob, canUpload, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const uploadInputRef = useRef<HTMLInputElement | null>(null);
-    const [uploadNodeId, setUploadNodeId] = useState<string | null>(null);
+    const [menu, setMenu] = useState<NodeMenuState | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [menu, setMenu] = useState<NodeMenuState | null>(null);
     const [convertTarget, setConvertTarget] = useState<NodeConvertTarget | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<NodeDeleteTarget | null>(null);
     const [linkTarget, setLinkTarget] = useState<NodeLinkTarget | null>(null);
@@ -135,9 +134,10 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
         closeMenu(target?.id);
         if (!target || target.kind === kind) return;
-        // Long notes overflow circles: confirm truncation before converting.
-        if (kind === "circle" && target.text.trim().length > MAX_NODE_TEXT_LENGTH) {
-            setConvertTarget({ nodeId: target.id, text: target.text, from: "note", to: "circle" });
+        // Media converts away with the kind: confirm before it is removed.
+        // Long notes also overflow circles: confirm truncation before converting.
+        if (target.kind === "media" || (kind === "circle" && target.text.trim().length > MAX_NODE_TEXT_LENGTH)) {
+            setConvertTarget({ nodeId: target.id, text: target.text, from: target.kind, to: kind });
             return;
         }
         await onSetKind?.(target.id, kind);
@@ -237,14 +237,6 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         if (media && media.src.trim().length > 0) openNodeUrl(media.src);
     }
 
-    function handleMenuUploadImage() {
-        const target = menu ? (nodes.find((n) => n.id === menu.nodeId) ?? null) : null;
-        closeMenu(target?.id);
-        if (!target || !canUpload) return;
-        setUploadNodeId(target.id);
-        uploadInputRef.current?.click();
-    }
-
     async function handlePickedUpload(nodeId: string, file: File | null): Promise<string | null> {
         if (!file) return null;
         const message = (await onUploadMedia?.(nodeId, file)) ?? null;
@@ -273,6 +265,13 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
         closeMenu(target?.id);
         if (!target || !target.media) return;
         await onSetMediaFill?.(target.id, !target.mediaFill);
+    }
+
+    function handleMenuSetSize(size: NodeSize) {
+        const target = menu?.nodeId;
+        closeMenu(target);
+        if (!target) return;
+        void onSetSize?.(target, size);
     }
 
     function handleCancelDelete() {
@@ -435,13 +434,14 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                         collapsed: n.collapsed,
                         hiddenCount: n.collapsed ? (subtreeCounts.get(n.id) ?? 1) - 1 : 0,
                     };
-                    if (n.kind === "note" || n.media) {
+                    if (n.kind !== "circle" || n.media) {
                         return (
                             <NodeRect
                                 key={n.id}
                                 {...nodeProps}
                                 media={n.media ?? null}
                                 mediaFill={n.mediaFill}
+                                size={n.size}
                                 onOpenMedia={handleOpenMediaBadge}
                                 loadBlob={loadBlob}
                             />
@@ -450,20 +450,6 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                     return <NodeCircle key={n.id} {...nodeProps} />;
                 })}
             </div>
-            <input
-                ref={uploadInputRef}
-                type="file"
-                hidden
-                accept={UPLOAD_ACCEPT}
-                aria-label="Upload image file"
-                onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null;
-                    e.target.value = "";
-                    const nodeId = uploadNodeId;
-                    setUploadNodeId(null);
-                    if (file && nodeId) void handlePickedUpload(nodeId, file);
-                }}
-            />
             {menuTarget && (
                 <NodeContextMenu
                     menu={menu}
@@ -472,6 +458,7 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                     url={menuTarget.url ?? null}
                     media={menuTarget.media ?? null}
                     mediaFill={menuTarget.mediaFill}
+                    size={menuTarget.size}
                     collapsed={menuTarget.collapsed}
                     hasChildren={menuHasChildren}
                     isRoot={menuTarget.id === rootNodeId}
@@ -485,8 +472,7 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
                     onOpenMedia={handleOpenMedia}
                     onRemoveMedia={() => void handleRemoveMedia()}
                     onToggleMediaFill={() => void handleMenuToggleMediaFill()}
-                    onUploadImage={handleMenuUploadImage}
-                    canUpload={canUpload ?? false}
+                    onSetSize={handleMenuSetSize}
                     onToggleCollapse={handleMenuToggleCollapse}
                     onDelete={handleMenuDelete}
                 />
