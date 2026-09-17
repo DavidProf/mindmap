@@ -72,7 +72,18 @@ export default function NodeMediaDialog({ target, canUpload, onCancel, onSave, o
         const message = await onUploadFile(file);
         // On success the parent closes the dialog; on error it stays open.
         setUploading(false);
-        if (message !== null) setUploadError(message);
+        if (message !== null) {
+            setUploadError(message);
+            return;
+        }
+        // A mid-edit upload lands while the dialog stays open (combined mode
+        // keeps text edits alive). Drop the stale URL draft so computeMedia
+        // keeps the fresh upload instead of overwriting it on Save. Uploads
+        // are image-only.
+        if (combined) {
+            setDraft("");
+            setMediaKind("image");
+        }
     }
 
     return (
