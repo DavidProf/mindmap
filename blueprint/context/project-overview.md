@@ -1,6 +1,6 @@
 # Mindmap - Project Overview
 
-<!-- blueprint:source-hash 02eed4e259c450b7330145468ef46f6d845a0c2e9e939eac66021705ef331326 -->
+<!-- blueprint:source-hash 04e8b17a2e5b219270229531c1ef6a1140ec2142d59ee73055684577a2be11f0 -->
 
 > Calm, mobile-first mind-map app where a centered root grows into a strict auto-laid-out tree that can be collapsed and exported as PNG - local-only, no login, Excalidraw-minimal on GitHub Pages.
 
@@ -22,26 +22,25 @@ This project removes manual positioning with a strict tree plus auto-layout, so 
 
 ## Features
 
-In `build-plan.md` order (MVP 1-7 plus item 8 shipped):
+In `build-plan.md` order:
 
-1. **App shell and minimal theme** - Vite SPA shell, SPA-safe routing, Excalidraw-minimal MUI theme, Pages base-path config. *(done)*
-2. **Home projects management** - project list newest-first with create, rename, delete, empty state, local persistence. *(done)*
-3. **Tree canvas with auto-layout** - centered root, strict-tree auto-layout, pan plus pinch and wheel zoom, re-center, persisted viewport. *(done - headline feature)*
-4. **Node add and edit** - redundant plus buttons around node (hover on desktop, tap on mobile) to add a child and focus inline editor, char-limit enforcement. *(done)*
-5. **Context menu and branch controls** - right-click and long-press menu for Edit, Delete, Collapse-Expand; subtree delete confirm; persisted collapsed state with reflow. *(done)*
-6. **PNG export** - client-side whole-tree PNG with light background, export button on editor. *(done)*
-7. **Deploy and polish** - Pages build config with deploy workflow, SPA-safe routing locked, `lastEdited` timestamps, responsive and touch polish, storage and empty-map error handling, zoom % indicator. *(done)*
-8. **Node text limit 30** - tighten node text from 60 to 30 chars with validation, counter, and tests; over-limit nodes display as-is until edited. *(done)*
-
-9. **Design polish pass** - palette/typography tokens, collapse badge and empty-state feel; add badges smaller with larger offset and auto-hide on click-out/deselect, collapse badge click toggles expand, node rename commits on blur, project rename inline like node (no dialog).
+1. **App shell and minimal theme** - Vite SPA shell, SPA-safe routing, Excalidraw-minimal MUI theme, Pages base-path config.
+2. **Home projects management** - project list newest-first with create, rename, delete, empty state, local persistence.
+3. **Tree canvas with auto-layout** - centered root, strict-tree auto-layout, pan plus pinch and wheel zoom, re-center, persisted viewport.
+4. **Node add and edit** - redundant plus buttons around node (hover on desktop, tap on mobile) to add a child and focus inline editor, char-limit enforcement.
+5. **Context menu and branch controls** - right-click and long-press menu for Edit, Delete, Collapse-Expand; subtree delete confirm; persisted collapsed state with reflow.
+6. **PNG export** - client-side whole-tree PNG with light background, export button on editor.
+7. **Deploy and polish** - Pages build config with deploy workflow, SPA-safe routing locked, `lastEdited` timestamps, responsive and touch polish, storage and empty-map error handling, zoom % indicator.
+8. **Node text limit 30** - tighten node text from 60 to 30 chars with validation, counter, and tests; over-limit nodes display as-is until edited.
+9. **Design polish pass** - palette/typography tokens, collapse badge and empty-state feel; add badges smaller with larger offset and auto-hide on click-out/deselect, collapse badge click toggles expand, node rename commits on blur, project rename inline like node.
 10. **Tree layout quality pass** - fix misleading placements (B→C[left] reading as root child; A→D[bottom] edge crossing B/C edges); subtree separation, edge routing, parent-proximity.
 11. **PNG export preview** - whole-tree fitted preview with confirm/download plus cancel.
 12. **IndexedDB storage** - IndexedDB primary with localStorage fallback plus unavailable warning.
-13. **Dense text and media nodes** - rectangle nodes for images/video/links and expanded text; includes sub-features 13a-13f (expanded-text rects, link nodes, media rects, local upload, full-bleed fill, node resize). *(done)*
+13. **Dense text and media nodes** - rectangle nodes for images/video/links and expanded text; includes sub-features 13a-13f (expanded-text rects, link nodes, media rects, local upload, full-bleed fill, node resize).
 14. **Context menu polish** - icon-first node menu: Edit and link icons on one row, convert section with per-kind icons, size letters (S, M, L, XL), one media edit entry, Open link/Open media removed.
-15. **Graph cross-links** - arbitrary links between nodes (breaks strict tree).
-16. **Undo and redo** - in-memory stack for add/delete/edit/collapse.
-17. **Home enhancements** - duplicate project, search/filter/sort, JSON import/export.
+15. **Undo/redo history** - in-memory stack for add/delete/edit/collapse.
+16. **Home enhancements** - duplicate project, search/filter/sort, JSON import/export.
+17. **Graph cross-links** - arbitrary links between nodes (breaks strict tree).
 18. **Presentation and a11y polish** - present mode, dark mode, keyboard nav (incl. Select + Del to delete selected node), PDF/print, ads evaluation.
 19. **Multi-select nodes** - multi-select with bulk actions.
 20. **Grid-like layout** - alternative placement model toward stable, direction-faithful positioning.
@@ -51,7 +50,7 @@ In `build-plan.md` order (MVP 1-7 plus item 8 shipped):
 
 ## Data model
 
-Local-only, no backend. Layout positions computed, not stored. `localStorage` for MVP (keys `mindmap:projects` + `mindmap:nodes`); migrating to `IndexedDB` primary with a `localStorage` fallback for environments without it (notably mobile-framework WebViews).
+Local-only, no backend. Layout positions computed, not stored. IndexedDB primary with a `localStorage` fallback for environments without it (notably mobile-framework WebViews); MVP keys were `mindmap:projects` + `mindmap:nodes`.
 
 ### Project
 
@@ -59,7 +58,7 @@ Local-only, no backend. Layout positions computed, not stored. `localStorage` fo
 - `name` (string, unique case-insensitive, trimmed, non-empty, max 40 chars) - display name and initial root label
 - `rootNodeId` (string) - FK to `Node.id`
 - `createdAt` (string, ISO-8601)
-- `updatedAt` (string, ISO-8601) - drives newest-first sort; content edits bump it, viewport-only saves preserve it (shipped with feature 7)
+- `updatedAt` (string, ISO-8601) - drives newest-first sort; content edits bump it, viewport-only saves preserve it
 - `viewport` (`{ x: number, y: number, zoom: number }`) - persisted pan and zoom, restored on open
 - Relationship: one `Project` has many `Node` via `Node.projectId`; one `Project` has one root `Node`
 - Sibling order is implicit creation order (layout preserves insertion order); no stored order field
@@ -96,7 +95,7 @@ Local-only, no backend. Layout positions computed, not stored. `localStorage` fo
 - **Custom SVG auto-layout** - stateless tree layout function returning `x,y` per node id, SVG lines for edges; React Flow dropped.
 - **Custom pan and zoom** - mouse drag plus wheel plus touch drag plus pinch, CSS transforms, persisted per project.
 - **Client-side PNG export** - manual Canvas 2D renderer (SVG positions redrawn, no new dependency), whole-tree fitted with light background.
-- **Unit tests (Vitest) plus browser smoke (Playwright Chromium)** - added after the plans via explicit setup; `npm test` and `npm run test:browser`.
+- **Unit tests (Vitest) plus browser smoke (Playwright Chromium)** - per plan §5; `npm test` and `npm run test:browser`.
 - **No backend** - no API layer, no auth, no env secrets.
 
 ## Monetization
@@ -123,11 +122,12 @@ Responsive and touch: hover logic disabled on touch, long-press tuned not to con
 - **Preview:** `npm run preview`
 - **Lint:** `npm run lint`
 - **SPA routing:** locked: `base "/mindmap/"` in production plus `HashRouter`, so no `404.html` fallback is needed.
-- **Storage:** browser `localStorage` only for now (IndexedDB migration is build-plan item 12); no DB, no env vars, no workers or cron, no health check
-- **Verify and CI:** `npm run verify` (tests plus typecheck plus build), run locally and on GitHub via `.github/workflows/verify.yml` for pull requests and pushes to `main`.
+- **Storage:** browser IndexedDB primary with localStorage fallback (build-plan item 12); no DB, no env vars, no workers or cron, no health check
+- **Verify and CI:** `npm run verify` (tests plus typecheck plus build), run locally and on GitHub via `.github/workflows/verify.yml` for pull requests and pushes to `main` - added after the plans via explicit setup; plans still say "no Verify/CI yet".
 
 ## Open questions
 
-- **Zoom % indicator (resolved by shipping):** build-plan item 7 added it though `project-plan.md` never mentions it. It shipped as a tiny read-only badge; no plan edit needed unless the direction changes.
-- **Stale plan text:** `project-plan.md` still describes the 30-char limit as a post-MVP idea and says "no browser tests harness yet," but item 8 is now done and `npm run test:browser` exists. Plans remain the source of truth; consider a small plan touch-up on the next plan edit, then re-run `/overview`.
-- **TODOs still in plans:** palette/typography tokens, collapse-indicator design, empty-state illustration (all feed build-plan item 9); cloud-migration path (feeds item 12); item 22 sync must be delta-based (whole-list transfer measured near 1 MB per op at 5k nodes; tombstones pending).
+- **Zoom % indicator:** build-plan item 7 includes a read-only zoom badge though `project-plan.md` never mentions it; no plan edit needed unless the direction changes.
+- **Build-only items with no project-plan entry:** items 14 (context menu polish), 20 (grid-like layout), and 21 (PNG preview fit-to-view) appear only in `build-plan.md`. Items 22-23 split the plan's "shareable links / cloud sync" line into URL-encode sharing vs cloud short-link; confirm that split is intended. Resolve in the plans, then re-run `/overview`.
+- **Stale plan text:** `project-plan.md` still describes the 30-char limit as a post-MVP idea and says "no Verify/CI command yet" and "no browser tests harness yet," but the build plan lists items 8, 12, and 15 and the repo already has `npm run verify` plus `npm run test:browser`. Plans remain the source of truth; consider a small plan touch-up on the next plan edit, then re-run `/overview`.
+- **TODOs still in plans:** palette/typography tokens, collapse-indicator design, empty-state illustration (all feed build-plan item 9 - confirm tokens are locked); cloud-migration path (feeds items 22-23); item 23 sync must be delta-based (whole-list transfer measured near 1 MB per op at 5k nodes; tombstones pending).
