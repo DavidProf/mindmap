@@ -25,9 +25,9 @@
   - [x] 13e. **Full-bleed media nodes** — per-node "Fill node with media" option, on by default (text becomes tooltip/alias; off keeps text + thumbnail); video plays inline via click-to-play
   - [x] 13f. **Node resize** — per-node small (default) / medium / large size for note and media nodes via context menu; adding media auto-sets medium; layout and export honor the footprint
 - [x] 14. **Context menu polish** — icon-first node menu: Edit (pencil) and link (chain) icons on one row; convert as its own section with an icon per target kind (circle, note, media); size as letters side by side (S, M, L, XL); Open link / Open media removed; Fill-node and Edit-media folded into one media edit entry point
-- [ ] 15. **Graph cross-links** — allow arbitrary links between nodes (breaks strict tree)
-- [ ] 16. **Undo/redo history** — in-memory stack for add/delete/edit/collapse (noted as deferred)
-- [ ] 17. **Home enhancements** — duplicate project, search/filter/sort, JSON import/export
+- [x] 15. **Undo/redo history** — in-memory stack for add/delete/edit/collapse (noted as deferred)
+- [ ] 16. **Home enhancements** — duplicate project, search/filter/sort, JSON import/export
+- [ ] 17. **Graph cross-links** — allow arbitrary links between nodes (breaks strict tree)
 - [ ] 18. **Presentation & a11y polish** — present mode, dark mode, keyboard nav (incl. Select + Del to delete selected node), PDF/print, ads evaluation
 - [ ] 19. **Multi-select nodes** — multi-select nodes with bulk actions (delete/collapse/move TBD)
 - [ ] 20. **Grid-like layout** — alternative placement model toward stable, direction-faithful positioning (idea captured from layout quality work; pending discussion before speccing)

@@ -1,5 +1,6 @@
 import type { Node, NodeKind, NodeMedia, NodeSide, NodeSize } from "../types/node";
 import { isMediaNodeKind, isNodeKind, isNodeSide, normalizeNodeSizeValue, normalizeNodes } from "../types/node";
+import { cloneNodes } from "../lib/history";
 import type { Project, Viewport } from "../types/project";
 import type { StorageBackend } from "./backend";
 import type { MediaBlobStore } from "./mediaBlobs";
@@ -398,6 +399,26 @@ export async function deleteNodeSubtreeAsync(
     }
     await blobs?.deleteBlobsForNodeIds([...ids]).catch(() => undefined);
     return { deletedIds: [...ids] };
+}
+
+export async function restoreProjectNodesAsync(
+    backend: StorageBackend,
+    projectId: string,
+    snapshot: Node[],
+): Promise<Node[]> {
+    const scoped = cloneNodes(snapshot);
+    const all = await backend.loadNodes();
+    const merged = [...all.filter((n) => n.projectId !== projectId), ...scoped];
+    await backend.saveNodes(merged);
+
+    const projects = await backend.loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === projectId);
+    if (pIdx !== -1) {
+        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+        await backend.saveProjects(projects);
+    }
+    mirrorToLocalStorage(projects, merged);
+    return scoped;
 }
 
 export function isQuotaError(e: unknown): boolean {

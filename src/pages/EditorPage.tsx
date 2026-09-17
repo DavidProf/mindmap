@@ -10,6 +10,7 @@ import {
     deleteNodeSubtreeAsync,
     getViewportAsync,
     isQuotaError,
+    restoreProjectNodesAsync,
     setNodeCollapsedAsync,
     setNodeMediaFillAsync,
     setNodeKindAsync,
@@ -21,6 +22,7 @@ import {
 import type { StorageBackend } from "../storage/backend";
 import { createIdbMediaBlobStore } from "../storage/mediaBlobs";
 import { genId, nowIso, validateImageFilePure } from "../storage/localStore";
+import { canRedo, canUndo, cloneNodes, createHistory, historyCapForSnapshot, pushEntry, redo, snapshotsEqual, undo, type HistoryStack } from "../lib/history";
 import { downscaleImageFile } from "../lib/images";
 import { computeLayout } from "../lib/layout";
 import { exportMapAsPng, paddedExportBounds, renderMapToCanvas, resolveExportScale } from "../lib/exportPng";
@@ -107,6 +109,10 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
     const [mediaWarning, setMediaWarning] = useState<string | null>(null);
     const exportTokenRef = useRef(0);
     const [blobStore] = useState(() => createIdbMediaBlobStore());
+    const [nodeHistory, setNodeHistory] = useState<HistoryStack<Node[]>>(() => createHistory<Node[]>());
+    const [historyTick, setHistoryTick] = useState(0);
+    const [busy, setBusy] = useState(false);
+    const pendingAddIdRef = useRef<string | null>(null);
     const canUpload = fallback === "indexeddb";
 
     const loadBlob = useCallback(
@@ -151,41 +157,78 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         };
     }, [backend, project.id]);
 
-    async function refreshNodes() {
+    async function refreshNodes(): Promise<Node[]> {
         const all = await backend.loadNodes();
-        setNodes(all.filter((n) => n.projectId === project.id));
+        const scoped = all.filter((n) => n.projectId === project.id);
+        setNodes(scoped);
+        return scoped;
+    }
+
+    function pushHistory(label: string, before: Node[], after: Node[]) {
+        if (snapshotsEqual(before, after)) return;
+        const cap = historyCapForSnapshot(Math.max(before.length, after.length));
+        const entry = { label, before: cloneNodes(before), after: cloneNodes(after) };
+        setNodeHistory((h) => pushEntry(h, entry, cap));
     }
 
     async function handleAddChild(parentId: string, text: string, side: NodeSide): Promise<Node | null> {
         if (nodes === null) return null;
+        const before = cloneNodes(nodes);
+        setBusy(true);
         try {
             // New children must be visible, so adding to a collapsed
             // parent expands it (the collapse toggle itself is feature 5).
             const parent = nodes.find((n) => n.id === parentId);
             if (parent?.collapsed) await setNodeCollapsedAsync(backend, parent.id, false);
             const child = await addChildNodeAsync(backend, project.id, parentId, text, side);
-            await refreshNodes();
+            const after = await refreshNodes();
+            pushHistory("Add node", before, after);
+            pendingAddIdRef.current = child.id;
             setError(null);
             return child;
         } catch (e) {
             setError(toEditorError(e, "Could not add node."));
             return null;
+        } finally {
+            setBusy(false);
         }
     }
 
     async function handleUpdateText(nodeId: string, text: string): Promise<Node | null> {
+        if (nodes === null) return null;
+        const before = cloneNodes(nodes);
+        setBusy(true);
         try {
             const updated = await updateNodeTextAsync(backend, nodeId, text);
-            await refreshNodes();
+            const after = await refreshNodes();
+            if (pendingAddIdRef.current === nodeId) {
+                pendingAddIdRef.current = null;
+                const mergedAfter = cloneNodes(after);
+                const mergeCap = historyCapForSnapshot(Math.max(before.length, mergedAfter.length));
+                setNodeHistory((h) => {
+                    const top = h.past[h.past.length - 1];
+                    if (top && top.label === "Add node") {
+                        return { past: [...h.past.slice(0, -1), { ...top, after: mergedAfter }], future: [] };
+                    }
+                    return pushEntry(h, { label: "Rename node", before: cloneNodes(before), after: mergedAfter }, mergeCap);
+                });
+            } else {
+                pushHistory("Rename node", before, after);
+            }
             setError(null);
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not update node."));
             return null;
+        } finally {
+            setBusy(false);
         }
     }
 
     async function handleSetKind(nodeId: string, kind: NodeKind, opts?: { allowTruncate?: boolean }): Promise<Node | null> {
+        if (nodes === null) return null;
+        const before = cloneNodes(nodes);
+        setBusy(true);
         try {
             // Converting away from media drops it; clean up the orphaned blob.
             const previousUploadId = nodes?.find((n) => n.id === nodeId)?.media?.uploadId ?? null;
@@ -193,24 +236,33 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
             if (previousUploadId && updated.media === null) {
                 await blobStore.deleteBlob(previousUploadId).catch(() => undefined);
             }
-            await refreshNodes();
+            const after = await refreshNodes();
+            pushHistory("Convert node", before, after);
             setError(null);
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not convert node."));
             return null;
+        } finally {
+            setBusy(false);
         }
     }
 
     async function handleSetUrl(nodeId: string, url: string | null): Promise<Node | null> {
+        if (nodes === null) return null;
+        const before = cloneNodes(nodes);
+        setBusy(true);
         try {
             const updated = await setNodeUrlAsync(backend, nodeId, url);
-            await refreshNodes();
+            const after = await refreshNodes();
+            pushHistory("Edit link", before, after);
             setError(null);
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not save link."));
             return null;
+        } finally {
+            setBusy(false);
         }
     }
 
@@ -226,38 +278,56 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
     }
 
     async function handleSetMedia(nodeId: string, media: NodeMedia | null): Promise<Node | null> {
+        if (nodes === null) return null;
+        const before = cloneNodes(nodes);
+        setBusy(true);
         try {
             const updated = await replaceNodeMedia(nodeId, media);
-            await refreshNodes();
+            const after = await refreshNodes();
+            pushHistory("Edit media", before, after);
             setError(null);
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not save media."));
             return null;
+        } finally {
+            setBusy(false);
         }
     }
 
     async function handleSetMediaFill(nodeId: string, fill: boolean): Promise<Node | null> {
+        if (nodes === null) return null;
+        const before = cloneNodes(nodes);
+        setBusy(true);
         try {
             const updated = await setNodeMediaFillAsync(backend, nodeId, fill);
-            await refreshNodes();
+            const after = await refreshNodes();
+            pushHistory("Toggle media fill", before, after);
             setError(null);
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not update the node."));
             return null;
+        } finally {
+            setBusy(false);
         }
     }
 
     async function handleSetSize(nodeId: string, size: NodeSize): Promise<Node | null> {
+        if (nodes === null) return null;
+        const before = cloneNodes(nodes);
+        setBusy(true);
         try {
             const updated = await setNodeSizeAsync(backend, nodeId, size);
-            await refreshNodes();
+            const after = await refreshNodes();
+            pushHistory("Resize node", before, after);
             setError(null);
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not update the node."));
             return null;
+        } finally {
+            setBusy(false);
         }
     }
 
@@ -266,6 +336,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         if (invalid) return { message: invalid, media: null };
         const node = nodes?.find((n) => n.id === nodeId) ?? null;
         if (!node) return { message: "Node not found.", media: null };
+        const before = cloneNodes(nodes ?? []);
         let pixels: Blob;
         try {
             pixels = await downscaleImageFile(file);
@@ -273,11 +344,13 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
             return { message: e instanceof Error ? e.message : "Could not read that image file.", media: null };
         }
         const uploadId = genId();
+        setBusy(true);
         try {
             await blobStore.saveBlob({ id: uploadId, projectId: node.projectId, nodeId, blob: pixels, createdAt: nowIso() });
             const media: NodeMedia = { kind: "image", src: "", uploadId };
             await replaceNodeMedia(nodeId, media);
-            await refreshNodes();
+            const after = await refreshNodes();
+            pushHistory("Upload image", before, after);
             setError(null);
             return { message: null, media };
         } catch (e) {
@@ -285,35 +358,109 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
             const message = toEditorError(e, "Could not save the uploaded image.");
             setError(message);
             return { message, media: null };
+        } finally {
+            setBusy(false);
         }
     }
 
     async function handleToggleCollapsed(nodeId: string): Promise<Node | null> {
         if (nodes === null) return null;
+        const before = cloneNodes(nodes);
+        setBusy(true);
         try {
             const node = nodes.find((n) => n.id === nodeId);
             if (!node) return null;
             const updated = await setNodeCollapsedAsync(backend, nodeId, !node.collapsed);
-            await refreshNodes();
+            const after = await refreshNodes();
+            pushHistory(updated.collapsed ? "Collapse branch" : "Expand branch", before, after);
             setError(null);
             return updated;
         } catch (e) {
             setError(toEditorError(e, "Could not collapse node."));
             return null;
+        } finally {
+            setBusy(false);
         }
     }
 
     async function handleDeleteSubtree(nodeId: string): Promise<{ deletedIds: string[] } | null> {
+        if (nodes === null) return null;
+        const before = cloneNodes(nodes);
+        setBusy(true);
         try {
             const res = await deleteNodeSubtreeAsync(backend, nodeId, blobStore);
-            await refreshNodes();
+            const after = await refreshNodes();
+            pushHistory("Delete branch", before, after);
             setError(null);
             return res;
         } catch (e) {
             setError(toEditorError(e, "Could not delete node."));
             return null;
+        } finally {
+            setBusy(false);
         }
     }
+
+    async function handleUndo(): Promise<void> {
+        if (busy) return;
+        const res = undo(nodeHistory);
+        if (!res.entry) return;
+        pendingAddIdRef.current = null;
+        setBusy(true);
+        try {
+            const restored = await restoreProjectNodesAsync(backend, project.id, res.entry.before);
+            setNodeHistory(res.stack);
+            setNodes(restored);
+            setHistoryTick((n) => n + 1);
+            setError(null);
+        } catch (e) {
+            setError(toEditorError(e, "Could not undo."));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleRedo(): Promise<void> {
+        if (busy) return;
+        const res = redo(nodeHistory);
+        if (!res.entry) return;
+        pendingAddIdRef.current = null;
+        setBusy(true);
+        try {
+            const restored = await restoreProjectNodesAsync(backend, project.id, res.entry.after);
+            setNodeHistory(res.stack);
+            setNodes(restored);
+            setHistoryTick((n) => n + 1);
+            setError(null);
+        } catch (e) {
+            setError(toEditorError(e, "Could not redo."));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    const canUndoNow = canUndo(nodeHistory);
+    const canRedoNow = canRedo(nodeHistory);
+
+    useEffect(() => {
+        function onKeyDown(e: KeyboardEvent) {
+            const mod = e.ctrlKey || e.metaKey;
+            if (!mod) return;
+            const key = e.key.toLowerCase();
+            const isUndo = key === "z" && !e.shiftKey;
+            const isRedo = (key === "z" && e.shiftKey) || key === "y";
+            if (!isUndo && !isRedo) return;
+            const target = e.target as HTMLElement | null;
+            if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+            if (document.querySelector('[role="dialog"]')) return;
+            if (busy) return;
+            e.preventDefault();
+            if (isUndo) void handleUndo();
+            else void handleRedo();
+        }
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    });
 
     if (nodes === null || initialViewport === undefined) {
         return (
@@ -436,6 +583,10 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
                 onRecenter={() => setRecenterSignal((n) => n + 1)}
                 onExport={handleExport}
                 exporting={exporting}
+                onUndo={() => void handleUndo()}
+                onRedo={() => void handleRedo()}
+                canUndo={canUndoNow && !busy}
+                canRedo={canRedoNow && !busy}
             />
             <main className="editor-canvas">
                 {fallback !== "indexeddb" && (
@@ -485,6 +636,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
                     canUpload={canUpload}
                     onToggleCollapsed={handleToggleCollapsed}
                     onDeleteSubtree={handleDeleteSubtree}
+                    historyTick={historyTick}
                 />
                 <ExportPreviewDialog
                     open={previewOpen}

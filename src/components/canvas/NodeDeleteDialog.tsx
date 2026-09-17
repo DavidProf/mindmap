@@ -21,7 +21,7 @@ export default function NodeDeleteDialog({ target, onCancel, onConfirm }: NodeDe
             <DialogContent>
                 <DialogContentText>
                     {target
-                        ? `Delete "${target.text}"? This will remove ${target.count} node(s). This cannot be undone.`
+                        ? `Delete "${target.text}"? This will remove ${target.count} node(s). You can undo this from the editor.`
                         : ""}
                 </DialogContentText>
             </DialogContent>

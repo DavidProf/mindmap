@@ -44,9 +44,10 @@ type TreeCanvasProps = {
     canUpload?: boolean;
     onToggleCollapsed?: (nodeId: string) => Promise<Node | null>;
     onDeleteSubtree?: (nodeId: string) => Promise<{ deletedIds: string[] } | null>;
+    historyTick?: number;
 };
 
-export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onSetUrl, onSetMedia, onSetMediaFill, onSetSize, onUploadMedia, loadBlob, canUpload, onToggleCollapsed, onDeleteSubtree }: TreeCanvasProps) {
+export default function TreeCanvas({ projectId, backend, initialViewport, rootNodeId, nodes, positions, edges, bounds, recenterSignal, onAddChild, onUpdateText, onSetKind, onSetUrl, onSetMedia, onSetMediaFill, onSetSize, onUploadMedia, loadBlob, canUpload, onToggleCollapsed, onDeleteSubtree, historyTick }: TreeCanvasProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [menu, setMenu] = useState<NodeMenuState | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -56,6 +57,20 @@ export default function TreeCanvas({ projectId, backend, initialViewport, rootNo
     const [linkTarget, setLinkTarget] = useState<NodeLinkTarget | null>(null);
     const [mediaTarget, setMediaTarget] = useState<NodeMediaTarget | null>(null);
     const visibleNodes = nodes.filter((n) => positions.has(n.id));
+
+    const prevHistoryTickRef = useRef(historyTick ?? 0);
+    useEffect(() => {
+        if ((historyTick ?? 0) === prevHistoryTickRef.current) return;
+        prevHistoryTickRef.current = historyTick ?? 0;
+        const alive = new Set(nodes.map((n) => n.id));
+        setSelectedId((prev) => (prev !== null && alive.has(prev) ? prev : null));
+        setEditingId((prev) => (prev !== null && alive.has(prev) ? prev : null));
+        setMenu(null);
+        setConvertTarget((prev) => (prev && alive.has(prev.nodeId) ? prev : null));
+        setDeleteTarget((prev) => (prev && alive.has(prev.nodeId) ? prev : null));
+        setLinkTarget((prev) => (prev && alive.has(prev.nodeId) ? prev : null));
+        setMediaTarget((prev) => (prev && alive.has(prev.nodeId) ? prev : null));
+    }, [historyTick, nodes]);
 
     function closeMenu(focusNodeId?: string) {
         setMenu((open) => (open === null ? open : null));

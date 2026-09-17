@@ -9,9 +9,14 @@ type AppHeaderProps = {
     onRecenter?: () => void;
     onExport?: () => void;
     exporting?: boolean;
+    onUndo?: () => void;
+    onRedo?: () => void;
+    canUndo?: boolean;
+    canRedo?: boolean;
 };
 
-export default function AppHeader({ variant = "home", projectName, onRecenter, onExport, exporting }: AppHeaderProps) {
+export default function AppHeader({ variant = "home", projectName, onRecenter, onExport, exporting, onUndo, onRedo, canUndo, canRedo }: AppHeaderProps) {
+    const modKey = typeof navigator !== "undefined" && /mac/i.test(navigator.platform ?? "") ? "Cmd" : "Ctrl";
     if (variant === "editor") {
         return (
             <header className="app-header app-header--editor">
@@ -29,6 +34,28 @@ export default function AppHeader({ variant = "home", projectName, onRecenter, o
                     </span>
                 </div>
                 <div className="app-header__actions">
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={onUndo}
+                        disabled={!canUndo}
+                        aria-label="Undo"
+                        title={`Undo (${modKey}+Z)`}
+                        sx={PILL_SX}
+                    >
+                        ↩ Undo
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={onRedo}
+                        disabled={!canRedo}
+                        aria-label="Redo"
+                        title={`Redo (${modKey}+Shift+Z)`}
+                        sx={PILL_SX}
+                    >
+                        ↪ Redo
+                    </Button>
                     <Button
                         variant="outlined"
                         size="small"
