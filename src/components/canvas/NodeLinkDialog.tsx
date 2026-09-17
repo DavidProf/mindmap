@@ -5,7 +5,6 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import TextField from "@mui/material/TextField";
-import { PILL_SX } from "../pillSx";
 import { validateNodeUrlPure } from "../../storage/localStore";
 
 export type NodeLinkTarget = { nodeId: string; text: string; url: string | null };
@@ -54,14 +53,14 @@ export default function NodeLinkDialog({ target, onCancel, onSave }: NodeLinkDia
             </DialogContent>
             <DialogActions>
                 {hasLink && (
-                    <Button onClick={() => onSave(null)} aria-label="Remove link" sx={PILL_SX}>
+                    <Button onClick={() => onSave(null)} aria-label="Remove link">
                         Remove
                     </Button>
                 )}
-                <Button onClick={onCancel} sx={PILL_SX}>
+                <Button onClick={onCancel}>
                     Cancel
                 </Button>
-                <Button variant="contained" onClick={handleSave} disabled={error !== null} aria-label="Save link" sx={PILL_SX}>
+                <Button variant="contained" onClick={handleSave} disabled={error !== null} aria-label="Save link">
                     Save
                 </Button>
             </DialogActions>

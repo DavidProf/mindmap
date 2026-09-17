@@ -1,11 +1,5 @@
-import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogContentText from "@mui/material/DialogContentText";
-import DialogTitle from "@mui/material/DialogTitle";
 import type { NodeKind } from "../../types/node";
-import { PILL_SX } from "../pillSx";
+import ConfirmDialog from "../dialogs";
 
 export type NodeConvertTarget = { nodeId: string; text: string; from: NodeKind; to: NodeKind };
 
@@ -26,19 +20,14 @@ export default function NodeConvertDialog({ target, onCancel, onConfirm }: NodeC
             : `This note has ${target.text.trim().length} characters, but circles hold 30. Converting truncates the text to 30 characters. This cannot be undone.`
         : "";
     return (
-        <Dialog open={target !== null} onClose={onCancel} maxWidth="xs" fullWidth>
-            <DialogTitle>Convert to {target?.to ?? ""}?</DialogTitle>
-            <DialogContent>
-                <DialogContentText>{message}</DialogContentText>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onCancel} sx={PILL_SX}>
-                    Cancel
-                </Button>
-                <Button variant="contained" onClick={onConfirm} aria-label="Confirm convert" sx={PILL_SX}>
-                    Convert
-                </Button>
-            </DialogActions>
-        </Dialog>
+        <ConfirmDialog
+            open={target !== null}
+            title={`Convert to ${target?.to ?? ""}?`}
+            message={message}
+            confirmLabel="Convert"
+            confirmTestId="Confirm convert"
+            onCancel={onCancel}
+            onConfirm={onConfirm}
+        />
     );
 }

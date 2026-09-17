@@ -51,6 +51,16 @@ function mirrorToLocalStorage(projects: Project[], nodes: Node[]): void {
     }
 }
 
+async function touchProjectAndSave(backend: StorageBackend, nodes: Node[], projectId: string): Promise<void> {
+    await backend.saveNodes(nodes);
+    const projects = await backend.loadProjects();
+    const pIdx = projects.findIndex((p) => p.id === projectId);
+    if (pIdx === -1) return;
+    projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
+    await backend.saveProjects(projects);
+    mirrorToLocalStorage(projects, nodes);
+}
+
 export async function createProjectAsync(backend: StorageBackend, name: string): Promise<Project> {
     const projects = await backend.loadProjects();
     const trimmed = name.trim();
@@ -187,15 +197,7 @@ export async function updateNodeTextAsync(backend: StorageBackend, nodeId: strin
     if (nodes[idx].text === trimmed) return nodes[idx];
     const updated: Node = { ...nodes[idx], text: trimmed, updatedAt: bumpedIso(nodes[idx].updatedAt) };
     nodes[idx] = updated;
-    await backend.saveNodes(nodes);
-
-    const projects = await backend.loadProjects();
-    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
-    if (pIdx !== -1) {
-        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
-        await backend.saveProjects(projects);
-        mirrorToLocalStorage(projects, nodes);
-    }
+    await touchProjectAndSave(backend, nodes, updated.projectId);
     return updated;
 }
 
@@ -229,15 +231,7 @@ export async function setNodeKindAsync(
         updatedAt: bumpedIso(nodes[idx].updatedAt),
     };
     nodes[idx] = updated;
-    await backend.saveNodes(nodes);
-
-    const projects = await backend.loadProjects();
-    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
-    if (pIdx !== -1) {
-        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
-        await backend.saveProjects(projects);
-        mirrorToLocalStorage(projects, nodes);
-    }
+    await touchProjectAndSave(backend, nodes, updated.projectId);
     return updated;
 }
 
@@ -253,15 +247,7 @@ export async function setNodeUrlAsync(backend: StorageBackend, nodeId: string, u
 
     const updated: Node = { ...nodes[idx], url: nextUrl, updatedAt: bumpedIso(nodes[idx].updatedAt) };
     nodes[idx] = updated;
-    await backend.saveNodes(nodes);
-
-    const projects = await backend.loadProjects();
-    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
-    if (pIdx !== -1) {
-        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
-        await backend.saveProjects(projects);
-        mirrorToLocalStorage(projects, nodes);
-    }
+    await touchProjectAndSave(backend, nodes, updated.projectId);
     return updated;
 }
 
@@ -303,15 +289,7 @@ export async function setNodeMediaAsync(
         updatedAt: bumpedIso(nodes[idx].updatedAt),
     };
     nodes[idx] = updated;
-    await backend.saveNodes(nodes);
-
-    const projects = await backend.loadProjects();
-    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
-    if (pIdx !== -1) {
-        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
-        await backend.saveProjects(projects);
-        mirrorToLocalStorage(projects, nodes);
-    }
+    await touchProjectAndSave(backend, nodes, updated.projectId);
     return updated;
 }
 
@@ -324,15 +302,7 @@ export async function setNodeMediaFillAsync(backend: StorageBackend, nodeId: str
 
     const updated: Node = { ...nodes[idx], mediaFill: fill, updatedAt: bumpedIso(nodes[idx].updatedAt) };
     nodes[idx] = updated;
-    await backend.saveNodes(nodes);
-
-    const projects = await backend.loadProjects();
-    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
-    if (pIdx !== -1) {
-        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
-        await backend.saveProjects(projects);
-        mirrorToLocalStorage(projects, nodes);
-    }
+    await touchProjectAndSave(backend, nodes, updated.projectId);
     return updated;
 }
 
@@ -344,15 +314,7 @@ export async function setNodeSizeAsync(backend: StorageBackend, nodeId: string, 
 
     const updated: Node = { ...nodes[idx], size, updatedAt: bumpedIso(nodes[idx].updatedAt) };
     nodes[idx] = updated;
-    await backend.saveNodes(nodes);
-
-    const projects = await backend.loadProjects();
-    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
-    if (pIdx !== -1) {
-        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
-        await backend.saveProjects(projects);
-        mirrorToLocalStorage(projects, nodes);
-    }
+    await touchProjectAndSave(backend, nodes, updated.projectId);
     return updated;
 }
 
@@ -364,15 +326,7 @@ export async function setNodeCollapsedAsync(backend: StorageBackend, nodeId: str
 
     const updated: Node = { ...nodes[idx], collapsed, updatedAt: bumpedIso(nodes[idx].updatedAt) };
     nodes[idx] = updated;
-    await backend.saveNodes(nodes);
-
-    const projects = await backend.loadProjects();
-    const pIdx = projects.findIndex((p) => p.id === updated.projectId);
-    if (pIdx !== -1) {
-        projects[pIdx] = { ...projects[pIdx], updatedAt: bumpedIso(projects[pIdx].updatedAt) };
-        await backend.saveProjects(projects);
-        mirrorToLocalStorage(projects, nodes);
-    }
+    await touchProjectAndSave(backend, nodes, updated.projectId);
     return updated;
 }
 

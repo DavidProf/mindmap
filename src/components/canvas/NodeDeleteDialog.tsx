@@ -1,10 +1,4 @@
-import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogContentText from "@mui/material/DialogContentText";
-import DialogTitle from "@mui/material/DialogTitle";
-import { PILL_SX } from "../pillSx";
+import ConfirmDialog from "../dialogs";
 
 export type NodeDeleteTarget = { nodeId: string; text: string; count: number };
 
@@ -16,29 +10,19 @@ type NodeDeleteDialogProps = {
 
 export default function NodeDeleteDialog({ target, onCancel, onConfirm }: NodeDeleteDialogProps) {
     return (
-        <Dialog open={target !== null} onClose={onCancel} maxWidth="xs" fullWidth>
-            <DialogTitle>Delete branch?</DialogTitle>
-            <DialogContent>
-                <DialogContentText>
-                    {target
-                        ? `Delete "${target.text}"? This will remove ${target.count} node(s). You can undo this from the editor.`
-                        : ""}
-                </DialogContentText>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onCancel} sx={PILL_SX}>
-                    Cancel
-                </Button>
-                <Button
-                    variant="contained"
-                    color="error"
-                    onClick={onConfirm}
-                    aria-label="Confirm delete"
-                    sx={PILL_SX}
-                >
-                    Delete
-                </Button>
-            </DialogActions>
-        </Dialog>
+        <ConfirmDialog
+            open={target !== null}
+            title="Delete branch?"
+            message={
+                target
+                    ? `Delete "${target.text}"? This will remove ${target.count} node(s). You can undo this from the editor.`
+                    : ""
+            }
+            confirmLabel="Delete"
+            danger
+            confirmTestId="Confirm delete"
+            onCancel={onCancel}
+            onConfirm={onConfirm}
+        />
     );
 }

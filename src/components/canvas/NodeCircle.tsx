@@ -1,8 +1,8 @@
 import { NODE_DIAMETER } from "../../lib/layout";
 import type { NodeSide } from "../../types/node";
 import NodeEditor from "./NodeEditor";
-import NodeLinkBadge from "./NodeLinkBadge";
-import { PLUS_POSITIONS, useNodeGestures } from "./useNodeGestures";
+import NodeFrame from "./NodeFrame";
+import { useNodeGestures } from "./useNodeGestures";
 import "./TreeCanvas.css";
 
 type NodeCircleProps = {
@@ -44,21 +44,25 @@ export default function NodeCircle({
     collapsed,
     hiddenCount,
 }: NodeCircleProps) {
-    const radius = NODE_DIAMETER / 2;
     const needsTooltip = text.length > 40;
     const g = useNodeGestures({ id, selected, onSelect, onEditStart, onContextMenu });
 
     return (
-        <div
-            className={`node-wrap${selected ? " node-wrap--selected" : ""}`}
-            data-node-id={id}
-            data-editing={editing ? "true" : undefined}
-            style={{
-                left: x - radius,
-                top: y - radius,
-                width: NODE_DIAMETER,
-                height: NODE_DIAMETER,
-            }}
+        <NodeFrame
+            id={id}
+            text={text}
+            url={url}
+            x={x}
+            y={y}
+            width={NODE_DIAMETER}
+            height={NODE_DIAMETER}
+            selected={selected}
+            editing={editing}
+            collapsed={collapsed}
+            hiddenCount={hiddenCount}
+            onAddChild={onAddChild}
+            onToggleCollapsed={onToggleCollapsed}
+            onOpenLink={onOpenLink}
         >
             <div
                 className="node-circle"
@@ -85,47 +89,6 @@ export default function NodeCircle({
                     <span className="node-circle__text">{text}</span>
                 )}
             </div>
-            {url && <NodeLinkBadge text={text} url={url} onOpen={() => onOpenLink(id)} />}
-            {collapsed && hiddenCount > 0 && (
-                <button
-                    type="button"
-                    className="node-badge"
-                    aria-expanded="false"
-                    aria-label={`Expand, ${hiddenCount} hidden node${hiddenCount === 1 ? "" : "s"}`}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleCollapsed(id);
-                    }}
-                    onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }}
-                >
-                    +{hiddenCount}
-                </button>
-            )}
-            {PLUS_POSITIONS.map((pos) => (
-                <button
-                    key={pos}
-                    type="button"
-                    className={`node-plus node-plus--${pos}`}
-                    aria-label={`Add child to ${text}`}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onAddChild(id, pos);
-                    }}
-                >
-                    <span aria-hidden="true">+</span>
-                </button>
-            ))}
-        </div>
+        </NodeFrame>
     );
 }

@@ -4,6 +4,7 @@ import {
     IDB_MEDIA_STORE,
     openMindmapDb,
 } from "./indexedDb";
+import { lazyDb, requestToPromise, transactionDone } from "./idbUtils";
 
 export type MediaBlob = {
     id: string;
@@ -21,21 +22,6 @@ export type MediaBlobStore = {
     deleteBlobsForProject(projectId: string): Promise<void>;
     countBlobs(): Promise<number>;
 };
-
-function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed."));
-    });
-}
-
-function transactionDone(tx: IDBTransaction): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error ?? new Error("IndexedDB transaction failed."));
-        tx.onabort = () => reject(tx.error ?? new Error("IndexedDB transaction aborted."));
-    });
-}
 
 export function createMemoryMediaBlobStore(): MediaBlobStore {
     const blobs = new Map<string, MediaBlob>();
@@ -70,16 +56,7 @@ export function createMemoryMediaBlobStore(): MediaBlobStore {
 }
 
 export function createIdbMediaBlobStore(open: () => Promise<IDBDatabase> = openMindmapDb): MediaBlobStore {
-    let db: Promise<IDBDatabase> | null = null;
-    const getDb = () => {
-        if (!db) {
-            db = open();
-            db.catch(() => {
-                db = null;
-            });
-        }
-        return db;
-    };
+    const getDb = lazyDb(open);
     async function deleteByIndex(indexName: string, key: string): Promise<void> {
         const database = await getDb();
         const tx = database.transaction(IDB_MEDIA_STORE, "readwrite");

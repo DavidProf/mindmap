@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from "@mui/material";
 import { MAX_PROJECT_NAME_LENGTH, validateProjectNamePure } from "../../storage/localStore";
 import type { Project } from "../../types/project";
-import { PILL_SX } from "../pillSx";
 
 type Props = {
     open: boolean;
@@ -55,7 +54,7 @@ export default function CreateProjectDialog({ open, projects, onClose, onSubmit 
                 />
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose} sx={PILL_SX}>
+                <Button onClick={onClose}>
                     Cancel
                 </Button>
                 <Button
@@ -63,7 +62,6 @@ export default function CreateProjectDialog({ open, projects, onClose, onSubmit 
                     onClick={handleSubmit}
                     disabled={error !== null}
                     aria-label="Create project"
-                    sx={PILL_SX}
                 >
                     Create
                 </Button>

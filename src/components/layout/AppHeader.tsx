@@ -1,6 +1,6 @@
 import { Button } from "@mui/material";
 import { Link } from "react-router-dom";
-import { PILL_SX } from "../pillSx";
+import BrandMark from "../BrandMark";
 import "./AppHeader.css";
 
 type AppHeaderProps = {
@@ -41,7 +41,6 @@ export default function AppHeader({ variant = "home", projectName, onRecenter, o
                         disabled={!canUndo}
                         aria-label="Undo"
                         title={`Undo (${modKey}+Z)`}
-                        sx={PILL_SX}
                     >
                         ↩ Undo
                     </Button>
@@ -52,7 +51,6 @@ export default function AppHeader({ variant = "home", projectName, onRecenter, o
                         disabled={!canRedo}
                         aria-label="Redo"
                         title={`Redo (${modKey}+Shift+Z)`}
-                        sx={PILL_SX}
                     >
                         ↪ Redo
                     </Button>
@@ -62,7 +60,6 @@ export default function AppHeader({ variant = "home", projectName, onRecenter, o
                         onClick={onRecenter}
                         disabled={!onRecenter}
                         aria-label="Re-center"
-                        sx={PILL_SX}
                     >
                         ↺ Re-center
                     </Button>
@@ -72,7 +69,6 @@ export default function AppHeader({ variant = "home", projectName, onRecenter, o
                         onClick={onExport}
                         disabled={!onExport || exporting}
                         aria-label="Export PNG"
-                        sx={PILL_SX}
                     >
                         {exporting ? "Exporting..." : "⤓ Export PNG"}
                     </Button>
@@ -84,22 +80,7 @@ export default function AppHeader({ variant = "home", projectName, onRecenter, o
     return (
         <header className="app-header">
             <div className="app-header__brand">
-                <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                >
-                    <circle cx="12" cy="12" r="3.5" />
-                    <circle cx="6" cy="7" r="2" />
-                    <circle cx="18" cy="7" r="2" />
-                    <circle cx="6" cy="17" r="2" />
-                    <circle cx="18" cy="17" r="2" />
-                    <path d="M9 10.2L12 12M12 12l2.9-1.8M12 12l-3 3.2M12 12l3 3.2" />
-                </svg>
+                <BrandMark />
                 <span>Mind Map</span>
                 <span className="app-header__local">— local</span>
             </div>

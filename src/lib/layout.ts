@@ -48,6 +48,10 @@ function kindOf(node: Node | undefined): NodeKind {
     return "circle";
 }
 
+export function isNoteKind(node: Node | undefined): boolean {
+    return kindOf(node) === "note";
+}
+
 // Bounding-circle radius per kind: circles use their radius, notes use
 // the half-diagonal so rotation-proof clearance holds in every direction.
 export function nodeRadius(kind: NodeKind, size: NodeSize = "small", diameter: number = NODE_DIAMETER): number {

@@ -36,73 +36,47 @@ export default function NodeEditor({ nodeId, initialText, maxLength = MAX_NODE_T
         else onCancel();
     }
 
-    // Notes commit on blur or Ctrl/Cmd+Enter so plain Enter adds a newline.
-    if (multiline) {
-        return (
-            <div className="node-editor" data-testid={`node-editor-${nodeId}`}>
-                <textarea
-                    ref={areaRef}
-                    className="node-editor__textarea"
-                    aria-label="Edit node text"
-                    value={draft}
-                    maxLength={maxLength}
-                    rows={rows}
-                    style={width ? { width } : undefined}
-                    onChange={(e) => setDraft(e.target.value.slice(0, maxLength))}
-                    onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                            e.preventDefault();
-                            finish(true);
-                        } else if (e.key === "Escape") {
-                            e.preventDefault();
-                            finish(false);
-                        }
-                    }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                    onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }}
-                    onBlur={() => finish(true)}
-                />
-                <span className="node-editor__counter" aria-hidden="true">
-                    {draft.length}/{maxLength}
-                </span>
-            </div>
-        );
+    function handleKeyDown(e: React.KeyboardEvent) {
+        e.stopPropagation();
+        // Notes commit on Ctrl/Cmd+Enter so plain Enter adds a newline.
+        if (multiline ? e.key === "Enter" && (e.ctrlKey || e.metaKey) : e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            finish(true);
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            finish(false);
+        }
     }
+
+    const shared = {
+        "aria-label": "Edit node text",
+        value: draft,
+        maxLength,
+        onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value.slice(0, maxLength)),
+        onKeyDown: handleKeyDown,
+        onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
+        onTouchStart: (e: React.TouchEvent) => e.stopPropagation(),
+        onClick: (e: React.MouseEvent) => e.stopPropagation(),
+        onContextMenu: (e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+        },
+        onBlur: () => finish(true),
+    };
 
     return (
         <div className="node-editor" data-testid={`node-editor-${nodeId}`}>
-            <input
-                ref={inputRef}
-                className="node-editor__input"
-                aria-label="Edit node text"
-                value={draft}
-                maxLength={maxLength}
-                onChange={(e) => setDraft(e.target.value.slice(0, maxLength))}
-                onKeyDown={(e) => {
-                    e.stopPropagation();
-                    if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                        e.preventDefault();
-                        finish(true);
-                    } else if (e.key === "Escape") {
-                        e.preventDefault();
-                        finish(false);
-                    }
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                onTouchStart={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-                onContextMenu={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }}
-                onBlur={() => finish(true)}
-            />
+            {multiline ? (
+                <textarea
+                    ref={areaRef}
+                    className="node-editor__textarea"
+                    rows={rows}
+                    style={width ? { width } : undefined}
+                    {...shared}
+                />
+            ) : (
+                <input ref={inputRef} className="node-editor__input" {...shared} />
+            )}
             <span className="node-editor__counter" aria-hidden="true">
                 {draft.length}/{maxLength}
             </span>

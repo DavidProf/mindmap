@@ -7,7 +7,6 @@ import CreateProjectDialog from "../components/home/CreateProjectDialog";
 import HomeEmptyState from "../components/home/HomeEmptyState";
 import ProjectGrid from "../components/home/ProjectGrid";
 import ProjectMenu from "../components/home/ProjectMenu";
-import { PILL_SX } from "../components/pillSx";
 import { consumeCorruptionFlag, validateProjectNamePure } from "../storage/localStore";
 import { initStorage, type StorageFallback } from "../storage/init";
 import {
@@ -15,11 +14,11 @@ import {
     deleteProjectAsync,
     getNodeCountForProjectAsync,
     getProjectsSortedByUpdatedAtAsync,
-    isQuotaError,
     renameProjectAsync,
 } from "../storage/operations";
 import type { StorageBackend } from "../storage/backend";
 import { createIdbMediaBlobStore } from "../storage/mediaBlobs";
+import { toUserError } from "../lib/errors";
 import type { Project } from "../types/project";
 import "./HomePage.css";
 
@@ -73,13 +72,7 @@ export default function HomePage() {
             await refresh(backend);
             return true;
         } catch (e) {
-            if (isQuotaError(e)) {
-                setQuotaError("Storage full — delete a project or clear data.");
-            } else if (e instanceof Error) {
-                setQuotaError(e.message);
-            } else {
-                setQuotaError("Failed to create project.");
-            }
+            setQuotaError(toUserError(e, "Failed to create project."));
             return false;
         }
     }
@@ -102,8 +95,7 @@ export default function HomePage() {
             setRenamingId(null);
             return true;
         } catch (e) {
-            if (e instanceof Error) setQuotaError(e.message);
-            else setQuotaError("Failed to rename project.");
+            setQuotaError(toUserError(e, "Failed to rename project."));
             return false;
         }
     }
@@ -115,8 +107,7 @@ export default function HomePage() {
             await refresh(backend);
             setDeleteTarget(null);
         } catch (e) {
-            if (e instanceof Error) setQuotaError(e.message);
-            else setQuotaError("Failed to delete project.");
+            setQuotaError(toUserError(e, "Failed to delete project."));
         }
     }
 
@@ -153,7 +144,7 @@ export default function HomePage() {
                         <p>Local to this browser · sorted newest first</p>
                     </div>
                     {!isEmpty && (
-                        <Button variant="contained" size="small" onClick={openCreate} aria-label="New project" sx={PILL_SX}>
+                        <Button variant="contained" size="small" onClick={openCreate} aria-label="New project">
                             + New project
                         </Button>
                     )}

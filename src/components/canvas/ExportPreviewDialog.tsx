@@ -3,7 +3,6 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
-import { PILL_SX } from "../pillSx";
 import { EXPORT_BACKGROUND } from "../../lib/exportPng";
 import { TOKENS } from "../../theme/tokens";
 
@@ -84,7 +83,7 @@ export default function ExportPreviewDialog({
                 </div>
             )}
             <DialogActions>
-                <Button onClick={onClose} disabled={downloading} sx={PILL_SX}>
+                <Button onClick={onClose} disabled={downloading}>
                     Cancel
                 </Button>
                 <Button
@@ -92,7 +91,6 @@ export default function ExportPreviewDialog({
                     onClick={onDownload}
                     disabled={downloading || previewError !== null}
                     aria-label="Download PNG"
-                    sx={PILL_SX}
                 >
                     {downloading ? "Exporting..." : "Download"}
                 </Button>

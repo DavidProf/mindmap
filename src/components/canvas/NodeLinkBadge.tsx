@@ -1,3 +1,5 @@
+import { CanvasButton } from "./NodeFrame";
+
 type NodeLinkBadgeProps = {
     text: string;
     url: string;
@@ -6,22 +8,7 @@ type NodeLinkBadgeProps = {
 
 export default function NodeLinkBadge({ text, url, onOpen }: NodeLinkBadgeProps) {
     return (
-        <button
-            type="button"
-            className="node-link"
-            title={url}
-            aria-label={`Open link for "${text}"`}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onClick={(e) => {
-                e.stopPropagation();
-                onOpen();
-            }}
-            onContextMenu={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            }}
-        >
+        <CanvasButton className="node-link" title={url} label={`Open link for "${text}"`} onPress={onOpen}>
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path
                     d="M6.5 9.5a3 3 0 0 0 4.24 0l2-2a3 3 0 0 0-4.24-4.24l-1 1"
@@ -36,6 +23,6 @@ export default function NodeLinkBadge({ text, url, onOpen }: NodeLinkBadgeProps)
                     strokeLinecap="round"
                 />
             </svg>
-        </button>
+        </CanvasButton>
     );
 }

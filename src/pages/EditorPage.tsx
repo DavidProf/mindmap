@@ -9,7 +9,6 @@ import {
     addChildNodeAsync,
     deleteNodeSubtreeAsync,
     getViewportAsync,
-    isQuotaError,
     restoreProjectNodesAsync,
     setNodeCollapsedAsync,
     setNodeMediaFillAsync,
@@ -24,6 +23,7 @@ import { createIdbMediaBlobStore } from "../storage/mediaBlobs";
 import { genId, nowIso, validateImageFilePure } from "../storage/localStore";
 import { canRedo, canUndo, cloneNodes, createHistory, historyCapForSnapshot, pushEntry, redo, snapshotsEqual, undo, type HistoryStack } from "../lib/history";
 import { downscaleImageFile } from "../lib/images";
+import { toUserError } from "../lib/errors";
 import { computeLayout } from "../lib/layout";
 import { exportMapAsPng, paddedExportBounds, renderMapToCanvas, resolveExportScale } from "../lib/exportPng";
 import { loadExportMediaImages, mediaLoadWarningPure, revokeExportObjectUrls } from "../lib/media";
@@ -89,11 +89,6 @@ export default function EditorPage() {
     }
 
     return <EditorCanvas key={project.id} project={project} backend={backend} fallback={fallback ?? "indexeddb"} />;
-}
-
-function toEditorError(e: unknown, fallbackMsg: string): string {
-    if (isQuotaError(e)) return "Storage full — delete a project or clear data.";
-    return e instanceof Error ? e.message : fallbackMsg;
 }
 
 function EditorCanvas({ project, backend, fallback }: { project: Project; backend: StorageBackend; fallback: StorageFallback }) {
@@ -171,34 +166,53 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         setNodeHistory((h) => pushEntry(h, entry, cap));
     }
 
-    async function handleAddChild(parentId: string, text: string, side: NodeSide): Promise<Node | null> {
-        if (nodes === null) return null;
-        const before = cloneNodes(nodes);
+    async function runMutation<T>(fallbackMsg: string, fn: () => Promise<T>): Promise<T | null> {
         setBusy(true);
         try {
-            // New children must be visible, so adding to a collapsed
-            // parent expands it (the collapse toggle itself is feature 5).
-            const parent = nodes.find((n) => n.id === parentId);
-            if (parent?.collapsed) await setNodeCollapsedAsync(backend, parent.id, false);
-            const child = await addChildNodeAsync(backend, project.id, parentId, text, side);
-            const after = await refreshNodes();
-            pushHistory("Add node", before, after);
-            pendingAddIdRef.current = child.id;
+            const result = await fn();
             setError(null);
-            return child;
+            return result;
         } catch (e) {
-            setError(toEditorError(e, "Could not add node."));
+            setError(toUserError(e, fallbackMsg));
             return null;
         } finally {
             setBusy(false);
         }
     }
 
+    async function runHistoryMutation<T>(
+        label: string | null,
+        fallbackMsg: string,
+        op: () => Promise<T>,
+    ): Promise<{ result: T; before: Node[]; after: Node[] } | null> {
+        if (nodes === null) return null;
+        const before = cloneNodes(nodes);
+        return runMutation(fallbackMsg, async () => {
+            const result = await op();
+            const after = await refreshNodes();
+            if (label) pushHistory(label, before, after);
+            return { result, before, after };
+        });
+    }
+
+    async function handleAddChild(parentId: string, text: string, side: NodeSide): Promise<Node | null> {
+        if (nodes === null) return null;
+        const outcome = await runHistoryMutation("Add node", "Could not add node.", async () => {
+            // New children must be visible, so adding to a collapsed
+            // parent expands it (the collapse toggle itself is feature 5).
+            const parent = nodes.find((n) => n.id === parentId);
+            if (parent?.collapsed) await setNodeCollapsedAsync(backend, parent.id, false);
+            return addChildNodeAsync(backend, project.id, parentId, text, side);
+        });
+        if (!outcome) return null;
+        pendingAddIdRef.current = outcome.result.id;
+        return outcome.result;
+    }
+
     async function handleUpdateText(nodeId: string, text: string): Promise<Node | null> {
         if (nodes === null) return null;
         const before = cloneNodes(nodes);
-        setBusy(true);
-        try {
+        return runMutation("Could not update node.", async () => {
             const updated = await updateNodeTextAsync(backend, nodeId, text);
             const after = await refreshNodes();
             if (pendingAddIdRef.current === nodeId) {
@@ -215,55 +229,29 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
             } else {
                 pushHistory("Rename node", before, after);
             }
-            setError(null);
             return updated;
-        } catch (e) {
-            setError(toEditorError(e, "Could not update node."));
-            return null;
-        } finally {
-            setBusy(false);
-        }
+        });
     }
 
     async function handleSetKind(nodeId: string, kind: NodeKind, opts?: { allowTruncate?: boolean }): Promise<Node | null> {
         if (nodes === null) return null;
-        const before = cloneNodes(nodes);
-        setBusy(true);
-        try {
-            // Converting away from media drops it; clean up the orphaned blob.
-            const previousUploadId = nodes?.find((n) => n.id === nodeId)?.media?.uploadId ?? null;
+        // Converting away from media drops it; clean up the orphaned blob.
+        const previousUploadId = nodes?.find((n) => n.id === nodeId)?.media?.uploadId ?? null;
+        const outcome = await runHistoryMutation("Convert node", "Could not convert node.", async () => {
             const updated = await setNodeKindAsync(backend, nodeId, kind, opts);
             if (previousUploadId && updated.media === null) {
                 await blobStore.deleteBlob(previousUploadId).catch(() => undefined);
             }
-            const after = await refreshNodes();
-            pushHistory("Convert node", before, after);
-            setError(null);
             return updated;
-        } catch (e) {
-            setError(toEditorError(e, "Could not convert node."));
-            return null;
-        } finally {
-            setBusy(false);
-        }
+        });
+        return outcome?.result ?? null;
     }
 
     async function handleSetUrl(nodeId: string, url: string | null): Promise<Node | null> {
-        if (nodes === null) return null;
-        const before = cloneNodes(nodes);
-        setBusy(true);
-        try {
-            const updated = await setNodeUrlAsync(backend, nodeId, url);
-            const after = await refreshNodes();
-            pushHistory("Edit link", before, after);
-            setError(null);
-            return updated;
-        } catch (e) {
-            setError(toEditorError(e, "Could not save link."));
-            return null;
-        } finally {
-            setBusy(false);
-        }
+        const outcome = await runHistoryMutation("Edit link", "Could not save link.", () =>
+            setNodeUrlAsync(backend, nodeId, url),
+        );
+        return outcome?.result ?? null;
     }
 
     async function replaceNodeMedia(nodeId: string, media: NodeMedia | null): Promise<Node | null> {
@@ -278,57 +266,24 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
     }
 
     async function handleSetMedia(nodeId: string, media: NodeMedia | null): Promise<Node | null> {
-        if (nodes === null) return null;
-        const before = cloneNodes(nodes);
-        setBusy(true);
-        try {
-            const updated = await replaceNodeMedia(nodeId, media);
-            const after = await refreshNodes();
-            pushHistory("Edit media", before, after);
-            setError(null);
-            return updated;
-        } catch (e) {
-            setError(toEditorError(e, "Could not save media."));
-            return null;
-        } finally {
-            setBusy(false);
-        }
+        const outcome = await runHistoryMutation("Edit media", "Could not save media.", () =>
+            replaceNodeMedia(nodeId, media),
+        );
+        return outcome?.result ?? null;
     }
 
     async function handleSetMediaFill(nodeId: string, fill: boolean): Promise<Node | null> {
-        if (nodes === null) return null;
-        const before = cloneNodes(nodes);
-        setBusy(true);
-        try {
-            const updated = await setNodeMediaFillAsync(backend, nodeId, fill);
-            const after = await refreshNodes();
-            pushHistory("Toggle media fill", before, after);
-            setError(null);
-            return updated;
-        } catch (e) {
-            setError(toEditorError(e, "Could not update the node."));
-            return null;
-        } finally {
-            setBusy(false);
-        }
+        const outcome = await runHistoryMutation("Toggle media fill", "Could not update the node.", () =>
+            setNodeMediaFillAsync(backend, nodeId, fill),
+        );
+        return outcome?.result ?? null;
     }
 
     async function handleSetSize(nodeId: string, size: NodeSize): Promise<Node | null> {
-        if (nodes === null) return null;
-        const before = cloneNodes(nodes);
-        setBusy(true);
-        try {
-            const updated = await setNodeSizeAsync(backend, nodeId, size);
-            const after = await refreshNodes();
-            pushHistory("Resize node", before, after);
-            setError(null);
-            return updated;
-        } catch (e) {
-            setError(toEditorError(e, "Could not update the node."));
-            return null;
-        } finally {
-            setBusy(false);
-        }
+        const outcome = await runHistoryMutation("Resize node", "Could not update the node.", () =>
+            setNodeSizeAsync(backend, nodeId, size),
+        );
+        return outcome?.result ?? null;
     }
 
     async function handleUploadMedia(nodeId: string, file: File): Promise<{ message: string | null; media: NodeMedia | null }> {
@@ -355,7 +310,7 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
             return { message: null, media };
         } catch (e) {
             await blobStore.deleteBlob(uploadId).catch(() => undefined);
-            const message = toEditorError(e, "Could not save the uploaded image.");
+            const message = toUserError(e, "Could not save the uploaded image.");
             setError(message);
             return { message, media: null };
         } finally {
@@ -365,40 +320,20 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
 
     async function handleToggleCollapsed(nodeId: string): Promise<Node | null> {
         if (nodes === null) return null;
-        const before = cloneNodes(nodes);
-        setBusy(true);
-        try {
-            const node = nodes.find((n) => n.id === nodeId);
-            if (!node) return null;
-            const updated = await setNodeCollapsedAsync(backend, nodeId, !node.collapsed);
-            const after = await refreshNodes();
-            pushHistory(updated.collapsed ? "Collapse branch" : "Expand branch", before, after);
-            setError(null);
-            return updated;
-        } catch (e) {
-            setError(toEditorError(e, "Could not collapse node."));
-            return null;
-        } finally {
-            setBusy(false);
-        }
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node) return null;
+        const label = node.collapsed ? "Expand branch" : "Collapse branch";
+        const outcome = await runHistoryMutation(label, "Could not collapse node.", () =>
+            setNodeCollapsedAsync(backend, nodeId, !node.collapsed),
+        );
+        return outcome?.result ?? null;
     }
 
     async function handleDeleteSubtree(nodeId: string): Promise<{ deletedIds: string[] } | null> {
-        if (nodes === null) return null;
-        const before = cloneNodes(nodes);
-        setBusy(true);
-        try {
-            const res = await deleteNodeSubtreeAsync(backend, nodeId, blobStore);
-            const after = await refreshNodes();
-            pushHistory("Delete branch", before, after);
-            setError(null);
-            return res;
-        } catch (e) {
-            setError(toEditorError(e, "Could not delete node."));
-            return null;
-        } finally {
-            setBusy(false);
-        }
+        const outcome = await runHistoryMutation("Delete branch", "Could not delete node.", () =>
+            deleteNodeSubtreeAsync(backend, nodeId, blobStore),
+        );
+        return outcome?.result ?? null;
     }
 
     async function handleUndo(): Promise<void> {
@@ -406,18 +341,14 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         const res = undo(nodeHistory);
         if (!res.entry) return;
         pendingAddIdRef.current = null;
-        setBusy(true);
-        try {
-            const restored = await restoreProjectNodesAsync(backend, project.id, res.entry.before);
-            setNodeHistory(res.stack);
+        const entry = res.entry;
+        const stack = res.stack;
+        await runMutation("Could not undo.", async () => {
+            const restored = await restoreProjectNodesAsync(backend, project.id, entry.before);
+            setNodeHistory(stack);
             setNodes(restored);
             setHistoryTick((n) => n + 1);
-            setError(null);
-        } catch (e) {
-            setError(toEditorError(e, "Could not undo."));
-        } finally {
-            setBusy(false);
-        }
+        });
     }
 
     async function handleRedo(): Promise<void> {
@@ -425,18 +356,14 @@ function EditorCanvas({ project, backend, fallback }: { project: Project; backen
         const res = redo(nodeHistory);
         if (!res.entry) return;
         pendingAddIdRef.current = null;
-        setBusy(true);
-        try {
-            const restored = await restoreProjectNodesAsync(backend, project.id, res.entry.after);
-            setNodeHistory(res.stack);
+        const entry = res.entry;
+        const stack = res.stack;
+        await runMutation("Could not redo.", async () => {
+            const restored = await restoreProjectNodesAsync(backend, project.id, entry.after);
+            setNodeHistory(stack);
             setNodes(restored);
             setHistoryTick((n) => n + 1);
-            setError(null);
-        } catch (e) {
-            setError(toEditorError(e, "Could not redo."));
-        } finally {
-            setBusy(false);
-        }
+        });
     }
 
     const canUndoNow = canUndo(nodeHistory);

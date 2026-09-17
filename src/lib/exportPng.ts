@@ -1,10 +1,11 @@
-import { NODE_DIAMETER, NODE_SIZE_PROFILES } from "./layout";
+import { NODE_DIAMETER, NODE_SIZE_PROFILES, isNoteKind } from "./layout";
 import type { NodeSize } from "../types/node";
 import { normalizeNodeSizeValue } from "../types/node";
 import { TOKENS } from "../theme/tokens";
 import { youtubeShortlinkPure } from "./media";
 import { isMediaFilledPure } from "../types/node";
 import type { Node, NodeMedia } from "../types/node";
+import { canvasToBlob as canvasToPngBlob } from "./images";
 
 export const EXPORT_PADDING = 48;
 export const EXPORT_BACKGROUND = TOKENS.bg;
@@ -124,9 +125,9 @@ export function wrapExportTextPure(
     showPhoto: boolean,
     opts?: { charsPerLine?: number; maxLines?: number },
 ): string[] {
-    if (showPhoto) return wrapLinesPure(text, opts?.charsPerLine ?? NOTE_MAX_CHARS_PER_LINE, 3);
-    if (isNote) return wrapLinesPure(text, opts?.charsPerLine ?? NOTE_MAX_CHARS_PER_LINE, opts?.maxLines ?? NOTE_MAX_LINES);
-    return wrapLinesPure(text);
+    const charsPerLine = opts?.charsPerLine ?? (isNote || showPhoto ? NOTE_MAX_CHARS_PER_LINE : 12);
+    const maxLines = showPhoto ? 3 : (opts?.maxLines ?? (isNote ? NOTE_MAX_LINES : 3));
+    return wrapLinesPure(text, charsPerLine, maxLines);
 }
 
 // Note text wraps to the rect's pixel width on canvas; derive the char budget
@@ -315,7 +316,7 @@ export function renderMapToCanvas(args: {
         if (!pos) continue;
         const [cx, cy] = toPx(pos.x, pos.y);
         // Circles with media render as rectangles on canvas, mirroring layout.
-        const isNote = node.kind === "note" || node.media != null;
+        const isNote = isNoteKind(node);
         const size = normalizeNodeSizeValue(node.size);
         if (isNote) {
             const rect = noteRectForExport(cx, cy, scale, size);
@@ -460,13 +461,8 @@ export function renderMapToCanvas(args: {
     return canvas;
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
-    return new Promise((resolve, reject) => {
-        canvas.toBlob((blob) => {
-            if (blob) resolve(blob);
-            else reject(new Error("Could not create PNG image."));
-        }, "image/png");
-    });
+function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
+    return canvasToPngBlob(canvas, "image/png");
 }
 
 export async function exportMapAsPng(args: {
@@ -488,7 +484,7 @@ export async function exportMapAsPng(args: {
         scale,
         images: args.images,
     });
-    const blob = await canvasToBlob(canvas);
+    const blob = await canvasToPng(canvas);
     const filename = buildExportFilename(args.projectName);
     const url = URL.createObjectURL(blob);
     try {

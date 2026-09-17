@@ -12,7 +12,6 @@ import type { NodeMedia, NodeMediaKind } from "../../types/node";
 import { isNodeMediaKind } from "../../types/node";
 import { MAX_NOTE_TEXT_LENGTH, validateNodeMediaPure } from "../../storage/localStore";
 import { TOKENS } from "../../theme/tokens";
-import { PILL_SX } from "../pillSx";
 
 export type NodeMediaTarget = { nodeId: string; text: string; media: NodeMedia | null; fill: boolean; combined: boolean };
 
@@ -137,7 +136,7 @@ export default function NodeMediaDialog({ target, canUpload, onCancel, onSave, o
                 />
                 {canUpload ? (
                     <div style={{ marginTop: 8 }}>
-                        <Button component="label" disabled={uploading} aria-label="Upload image file" sx={PILL_SX}>
+                        <Button component="label" disabled={uploading} aria-label="Upload image file">
                             {uploading ? "Uploading..." : "Upload image"}
                             <input type="file" hidden accept={UPLOAD_ACCEPT} onChange={(e) => void handlePick(e)} />
                         </Button>
@@ -167,15 +166,14 @@ export default function NodeMediaDialog({ target, canUpload, onCancel, onSave, o
                             else onSave(null);
                         }}
                         aria-label="Remove media"
-                        sx={PILL_SX}
                     >
                         Remove
                     </Button>
                 )}
-                <Button onClick={onCancel} sx={PILL_SX}>
+                <Button onClick={onCancel}>
                     Cancel
                 </Button>
-                <Button variant="contained" onClick={handleSave} disabled={error !== null} aria-label="Save media" sx={PILL_SX}>
+                <Button variant="contained" onClick={handleSave} disabled={error !== null} aria-label="Save media">
                     Save
                 </Button>
             </DialogActions>
