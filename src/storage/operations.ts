@@ -1,6 +1,7 @@
 import type { Node, NodeKind, NodeMedia, NodeSide, NodeSize } from "../types/node";
 import { isMediaNodeKind, isNodeKind, isNodeSide, normalizeNodeSizeValue, normalizeNodes } from "../types/node";
 import { cloneNodes } from "../lib/history";
+import { buildDuplicateNamePure, buildImportedNamePure, type ParsedProjectImport } from "../lib/projectHome";
 import type { Project, Viewport } from "../types/project";
 import type { StorageBackend } from "./backend";
 import type { MediaBlobStore } from "./mediaBlobs";
@@ -137,6 +138,117 @@ export async function deleteProjectAsync(backend: StorageBackend, id: string, bl
     await backend.saveNodes(remainingNodes);
     mirrorToLocalStorage(remainingProjects, remainingNodes);
     await blobs?.deleteBlobsForProject(id).catch(() => undefined);
+}
+
+export async function duplicateProjectAsync(backend: StorageBackend, id: string, blobs?: MediaBlobStore): Promise<Project> {
+    const projects = await backend.loadProjects();
+    const source = projects.find((p) => p.id === id);
+    if (!source) throw new Error("Project not found.");
+    const allNodes = await backend.loadNodes();
+    const scoped = allNodes.filter((n) => n.projectId === id);
+    if (scoped.length === 0) throw new Error("Project not found.");
+
+    const name = buildDuplicateNamePure(source.name, projects);
+    const now = bumpedIso(source.updatedAt);
+    const newProjectId = genId();
+    const idMap = new Map<string, string>();
+    for (const n of scoped) idMap.set(n.id, genId());
+
+    const newNodes: Node[] = scoped.map((n) => {
+        const nextId = idMap.get(n.id)!;
+        const uploadId = n.media?.uploadId ?? null;
+        if (uploadId !== null && !blobs) return { ...n, id: nextId, projectId: newProjectId, parentId: n.parentId === null ? null : idMap.get(n.parentId) ?? null, kind: isMediaNodeKind(n.kind) ? ("note" as const) : n.kind, media: null, mediaFill: true, createdAt: now, updatedAt: now };
+        const nextUploadId = uploadId !== null ? genId() : null;
+        return {
+            ...n,
+            id: nextId,
+            projectId: newProjectId,
+            parentId: n.parentId === null ? null : (idMap.get(n.parentId) ?? null),
+            media: n.media === null ? null : { ...n.media, uploadId: nextUploadId },
+            createdAt: now,
+            updatedAt: now,
+        };
+    });
+    const project: Project = {
+        id: newProjectId,
+        name,
+        rootNodeId: idMap.get(source.rootNodeId) ?? newNodes.find((n) => n.parentId === null)?.id ?? newNodes[0].id,
+        createdAt: now,
+        updatedAt: now,
+        viewport: { ...source.viewport },
+    };
+
+    if (blobs) {
+        function clearUploadRef(nodeId: string): void {
+            const idx = newNodes.findIndex((m) => m.id === nodeId);
+            if (idx === -1) return;
+            newNodes[idx] = { ...newNodes[idx], kind: isMediaNodeKind(newNodes[idx].kind) ? ("note" as const) : newNodes[idx].kind, media: null, mediaFill: true };
+        }
+        for (const n of scoped) {
+            const oldUploadId = n.media?.uploadId ?? null;
+            if (oldUploadId === null) continue;
+            const fresh = newNodes.find((m) => m.id === idMap.get(n.id))!;
+            const record = await blobs.loadBlob(oldUploadId).catch(() => null);
+            if (!record) {
+                clearUploadRef(fresh.id);
+                continue;
+            }
+            try {
+                await blobs.saveBlob({ id: fresh.media?.uploadId ?? genId(), projectId: newProjectId, nodeId: fresh.id, blob: record.blob, createdAt: now });
+            } catch {
+                clearUploadRef(fresh.id);
+            }
+        }
+    }
+
+    projects.push(project);
+    const merged = [...allNodes, ...normalizeNodes(newNodes)];
+    await backend.saveProjects(projects);
+    await backend.saveNodes(merged);
+    mirrorToLocalStorage(projects, merged);
+    return project;
+}
+
+export async function importProjectAsync(backend: StorageBackend, parsed: ParsedProjectImport): Promise<Project> {
+    const projects = await backend.loadProjects();
+    const name = buildImportedNamePure(parsed.name, projects);
+    const latest = projects.reduce((m, p) => (Date.parse(p.updatedAt) > Date.parse(m) ? p.updatedAt : m), projects[0]?.updatedAt ?? nowIso());
+    const now = bumpedIso(latest);
+    const newProjectId = genId();
+    const idMap = new Map<string, string>();
+    for (const n of parsed.nodes) idMap.set(n.id, genId());
+    const root = parsed.nodes.find((n) => n.parentId === null)!;
+
+    const scoped: Node[] = parsed.nodes.map((n) => ({
+        id: idMap.get(n.id)!,
+        projectId: newProjectId,
+        parentId: n.parentId === null ? null : (idMap.get(n.parentId) ?? null),
+        text: n.text,
+        kind: n.kind,
+        url: n.url,
+        media: n.media?.uploadId ? null : n.media,
+        mediaFill: n.media?.uploadId ? true : n.mediaFill,
+        size: n.size,
+        side: n.side,
+        collapsed: n.collapsed,
+        createdAt: now,
+        updatedAt: now,
+    }));
+    const project: Project = {
+        id: newProjectId,
+        name,
+        rootNodeId: idMap.get(root.id)!,
+        createdAt: now,
+        updatedAt: now,
+        viewport: { ...parsed.viewport },
+    };
+
+    projects.push(project);
+    const merged = [...(await backend.loadNodes()), ...normalizeNodes(scoped)];
+    await backend.saveProjects(projects);
+    await backend.saveNodes(merged);
+    mirrorToLocalStorage(projects, merged);
+    return project;
 }
 
 export async function addChildNodeAsync(

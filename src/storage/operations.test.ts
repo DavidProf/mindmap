@@ -4,9 +4,11 @@ import {
     createProjectAsync,
     deleteNodeSubtreeAsync,
     deleteProjectAsync,
+    duplicateProjectAsync,
     getNodeCountForProjectAsync,
     getProjectsSortedByUpdatedAtAsync,
     getViewportAsync,
+    importProjectAsync,
     isQuotaError,
     renameProjectAsync,
     setNodeCollapsedAsync,
@@ -496,5 +498,109 @@ describe("quota handling", () => {
         await expect(createProjectAsync(backend, "Alpha")).rejects.toThrow(quotaError);
         vi.unstubAllGlobals();
         __resetForTests();
+    });
+});
+
+describe("duplicateProjectAsync", () => {
+    it("deep-copies nodes with fresh ids, (copy) name, and newest-first order", async () => {
+        const backend = createMemoryBackend();
+        const blobs = createMemoryMediaBlobStore();
+        const source = await createProjectAsync(backend, "Alpha");
+        const kid = await addChildNodeAsync(backend, source.id, source.rootNodeId, "Kid", "east");
+        await setNodeCollapsedAsync(backend, source.rootNodeId, false);
+        const copy = await duplicateProjectAsync(backend, source.id, blobs);
+        expect(copy.id).not.toBe(source.id);
+        expect(copy.name).toBe("Alpha (copy)");
+        expect(copy.rootNodeId).not.toBe(source.rootNodeId);
+        expect(await getNodeCountForProjectAsync(backend, copy.id)).toBe(2);
+        const nodes = await backend.loadNodes();
+        const copiedKid = nodes.find((n) => n.projectId === copy.id && n.parentId !== null)!;
+        expect(copiedKid.text).toBe("Kid");
+        expect(copiedKid.id).not.toBe(kid.id);
+        const sorted = await getProjectsSortedByUpdatedAtAsync(backend);
+        expect(sorted[0].id).toBe(copy.id);
+        const copy2 = await duplicateProjectAsync(backend, source.id, blobs);
+        expect(copy2.name).toBe("Alpha (copy 2)");
+    });
+    it("copies upload blobs and clears refs when the blob is missing", async () => {
+        const backend = createMemoryBackend();
+        const blobs = createMemoryMediaBlobStore();
+        const source = await createProjectAsync(backend, "Media");
+        const kid = await addChildNodeAsync(backend, source.id, source.rootNodeId, "Photo", "east");
+        await setNodeMediaAsync(backend, kid.id, { kind: "image", src: "", uploadId: "blob-1" });
+        await blobs.saveBlob({ id: "blob-1", projectId: source.id, nodeId: kid.id, blob: new Blob(["a"]), createdAt: STAMP });
+        const copy = await duplicateProjectAsync(backend, source.id, blobs);
+        const nodes = await backend.loadNodes();
+        const copiedKid = nodes.find((n) => n.projectId === copy.id && n.parentId !== null)!;
+        const newUploadId = copiedKid.media?.uploadId ?? null;
+        expect(newUploadId).not.toBeNull();
+        expect(newUploadId).not.toBe("blob-1");
+        const record = await blobs.loadBlob(newUploadId!);
+        expect(record?.projectId).toBe(copy.id);
+        expect(record?.nodeId).toBe(copiedKid.id);
+
+        const missing = await createProjectAsync(backend, "Gone");
+        const ghost = await addChildNodeAsync(backend, missing.id, missing.rootNodeId, "Ghost", "east");
+        await setNodeMediaAsync(backend, ghost.id, { kind: "image", src: "", uploadId: "blob-gone" });
+        const copyMissing = await duplicateProjectAsync(backend, missing.id, blobs);
+        const nodesAfter = await backend.loadNodes();
+        const copiedGhost = nodesAfter.find((n) => n.projectId === copyMissing.id && n.parentId !== null)!;
+        expect(copiedGhost.media).toBeNull();
+    });
+    it("strips upload refs when duplicating without a blob store", async () => {
+        const backend = createMemoryBackend();
+        const source = await createProjectAsync(backend, "NoBlobs");
+        const kid = await addChildNodeAsync(backend, source.id, source.rootNodeId, "Photo", "east");
+        await setNodeMediaAsync(backend, kid.id, { kind: "image", src: "", uploadId: "blob-1" });
+        const copy = await duplicateProjectAsync(backend, source.id);
+        const nodes = await backend.loadNodes();
+        const copiedKid = nodes.find((n) => n.projectId === copy.id && n.parentId !== null)!;
+        expect(copiedKid.media).toBeNull();
+        expect(copiedKid.kind).toBe("note");
+    });
+    it("clears the upload ref when the blob copy fails", async () => {
+        const backend = createMemoryBackend();
+        const blobs = createMemoryMediaBlobStore();
+        const source = await createProjectAsync(backend, "Flaky");
+        const kid = await addChildNodeAsync(backend, source.id, source.rootNodeId, "Photo", "east");
+        await setNodeMediaAsync(backend, kid.id, { kind: "image", src: "", uploadId: "blob-1" });
+        await blobs.saveBlob({ id: "blob-1", projectId: source.id, nodeId: kid.id, blob: new Blob(["a"]), createdAt: STAMP });
+        const failingBlobs = { ...blobs, saveBlob: () => Promise.reject(new Error("full")) };
+        const copy = await duplicateProjectAsync(backend, source.id, failingBlobs);
+        const nodes = await backend.loadNodes();
+        const copiedKid = nodes.find((n) => n.projectId === copy.id && n.parentId !== null)!;
+        expect(copiedKid.media).toBeNull();
+        expect(copiedKid.kind).toBe("note");
+    });
+});
+
+describe("importProjectAsync", () => {
+    it("remaps ids, auto-renames on collision, and strips upload refs", async () => {
+        const { serializeProjectExportPure, parseProjectImportPure } = await import("../lib/projectHome");
+        const backend = createMemoryBackend();
+        const source = await createProjectAsync(backend, "Alpha");
+        await addChildNodeAsync(backend, source.id, source.rootNodeId, "Kid", "east");
+        const file = serializeProjectExportPure(source, await backend.loadNodes());
+        const parsed = parseProjectImportPure(JSON.stringify(file));
+        const imported = await importProjectAsync(backend, parsed);
+        expect(imported.name).toBe("Alpha (imported)");
+        expect(imported.id).not.toBe(source.id);
+        expect(await getNodeCountForProjectAsync(backend, imported.id)).toBe(2);
+        const nodes = await backend.loadNodes();
+        const importedRoot = nodes.find((n) => n.id === imported.rootNodeId)!;
+        expect(importedRoot.text).toBe("Alpha");
+        expect(importedRoot.parentId).toBeNull();
+
+        const withUpload = {
+            ...parsed,
+            name: "Fresh",
+            nodes: parsed.nodes.map((n) =>
+                n.parentId === null ? n : { ...n, kind: "media" as const, media: { kind: "image" as const, src: "", uploadId: "blob-x" } },
+            ),
+        };
+        const stripped = await importProjectAsync(backend, withUpload);
+        const after = await backend.loadNodes();
+        const mediaKid = after.find((n) => n.projectId === stripped.id && n.parentId !== null)!;
+        expect(mediaKid.media).toBeNull();
     });
 });

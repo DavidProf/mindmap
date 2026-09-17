@@ -26,11 +26,13 @@
   - [x] 13f. **Node resize** — per-node small (default) / medium / large size for note and media nodes via context menu; adding media auto-sets medium; layout and export honor the footprint
 - [x] 14. **Context menu polish** — icon-first node menu: Edit (pencil) and link (chain) icons on one row; convert as its own section with an icon per target kind (circle, note, media); size as letters side by side (S, M, L, XL); Open link / Open media removed; Fill-node and Edit-media folded into one media edit entry point
 - [x] 15. **Undo/redo history** — in-memory stack for add/delete/edit/collapse (noted as deferred)
-- [ ] 16. **Home enhancements** — duplicate project, search/filter/sort, JSON import/export
+- [x] 16. **Home enhancements** — duplicate project, search/filter/sort, JSON import/export
 - [ ] 17. **Graph cross-links** — allow arbitrary links between nodes (breaks strict tree)
 - [ ] 18. **Presentation & a11y polish** — present mode, dark mode, keyboard nav (incl. Select + Del to delete selected node), PDF/print, ads evaluation
 - [ ] 19. **Multi-select nodes** — multi-select nodes with bulk actions (delete/collapse/move TBD)
+  - [ ] 19a. **Bulk project export/import** — multi-select projects on Home and export/import them together (single bundle file)
 - [ ] 20. **Grid-like layout** — alternative placement model toward stable, direction-faithful positioning (idea captured from layout quality work; pending discussion before speccing)
 - [ ] 21. **PNG preview fit-to-view** — scale whole-tree preview to fit the dialog without scrolling (fit-to-dialog; zoom to actual size where feasible)
 - [ ] 22. **Share via URL** — encode a project into a shareable URL (query/hash) that opens or imports a copy, with length-limit + malformed-link handling
 - [ ] 23. **Team sharing via short link** — cloud-backed short link that lets teammates open and edit the same project (auth + synced storage); local-only remains the default; sync must be delta-based (per-record updatedAt cursors + delete tombstones), not whole-list transfer (storage ops stay whole-list until this item; tombstones not yet implemented)
+- [ ] 24. **JSON export with uploaded images** — embed local upload blobs in project JSON export so round-trips preserve images; file-size handling and export schema version bump

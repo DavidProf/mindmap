@@ -302,6 +302,75 @@ test("media fill (13e): export paints the filled node with the image", async ({ 
     expect(redPixels).toBeGreaterThan(40000);
 });
 
+test("home enhancements (16): duplicate, search, export, import round-trip", async ({ page }) => {
+    const stamp = Date.now();
+    const projectName = `Home16 ${stamp}`;
+    const copyName = `${projectName} (copy)`;
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /new project|create your first project/i }).first().click();
+    await page.getByLabel("Project name").fill(projectName);
+    await page.getByRole("button", { name: "Create project" }).click();
+    await expect(page.getByRole("button", { name: `Open project ${projectName}` })).toBeVisible();
+
+    await page.getByRole("button", { name: `Open project ${projectName}` }).click();
+    await expect(page).toHaveURL(/#\/project\/.+/);
+    await page.getByLabel(projectName, { exact: true }).click();
+    await page.getByRole("button", { name: `Add child to ${projectName}` }).first().click();
+    const editor = page.getByLabel("Edit node text");
+    await editor.fill("Roundtrip kid");
+    await editor.press("Enter");
+    await expect(page.getByText("Roundtrip kid")).toBeVisible();
+
+    await page.goto("/");
+    await page.getByRole("button", { name: `Actions for ${projectName}` }).click();
+    await page.getByRole("menuitem", { name: "Duplicate" }).click();
+    await expect(page.getByRole("button", { name: `Open project ${copyName}` })).toBeVisible();
+
+    const search = page.getByLabel("Search projects");
+    await search.fill("(copy)");
+    await expect(page.getByRole("button", { name: `Open project ${copyName}`, exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: `Open project ${projectName}`, exact: true })).toHaveCount(0);
+    await expect(page.getByText("1 of 2 projects")).toBeVisible();
+    await search.fill("");
+    await expect(page.getByRole("button", { name: `Open project ${projectName}`, exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: `Actions for ${copyName}` }).click();
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("menuitem", { name: "Export JSON" }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/-mindmap\.json$/);
+    const downloadPath = await download.path();
+    expect(downloadPath).toBeTruthy();
+
+    await page.getByRole("button", { name: "Import project from JSON" }).click();
+    await page.locator('input[type="file"]').setInputFiles(downloadPath!);
+    const importedName = `${copyName} (imported)`;
+    await expect(page.getByRole("button", { name: `Open project ${importedName}` })).toBeVisible();
+
+    await page.getByRole("button", { name: `Open project ${importedName}` }).click();
+    await expect(page).toHaveURL(/#\/project\/.+/);
+    await expect(page.getByText("Roundtrip kid")).toBeVisible();
+
+    await page.goto("/");
+    const badBuffer = Buffer.from("{nope", "utf-8");
+    await page.locator('input[type="file"]').setInputFiles({ name: "bad.json", mimeType: "application/json", buffer: badBuffer });
+    await expect(page.getByText("Not a valid mindmap file")).toBeVisible();
+
+    await page.getByRole("combobox", { name: "Sort", exact: true }).click();
+    await page.getByRole("option", { name: "Name" }).click();
+    const cardNames = page.locator(".home-card__name");
+    await expect(cardNames.first()).toHaveText(importedName);
+    await page.getByRole("button", { name: "Toggle sort direction" }).click();
+    await expect(cardNames.first()).toHaveText(projectName);
+
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto("/");
+    await expect(page.getByLabel("Search projects")).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Sort", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Import project from JSON" })).toBeVisible();
+});
+
 test("media fill (13e): video node plays inline on click and stops on click-out", async ({ page }) => {
     await page.route("**://example.com/clip.mp4", (route) =>
         route.fulfill({

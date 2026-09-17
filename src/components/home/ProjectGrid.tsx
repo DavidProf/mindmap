@@ -3,6 +3,7 @@ import ProjectCard from "./ProjectCard";
 
 type Props = {
     projects: Project[];
+    allProjects?: Project[];
     openMenuId: string | null;
     renamingId: string | null;
     onOpen: (id: string) => void;
@@ -11,14 +12,15 @@ type Props = {
     onRenameCancel: () => void;
 };
 
-export default function ProjectGrid({ projects, openMenuId, renamingId, onOpen, onMenu, onRenameCommit, onRenameCancel }: Props) {
+export default function ProjectGrid({ projects, allProjects, openMenuId, renamingId, onOpen, onMenu, onRenameCommit, onRenameCancel }: Props) {
+    const validationPool = allProjects ?? projects;
     return (
         <div className="home-grid">
             {projects.map((p) => (
                 <ProjectCard
                     key={p.id}
                     project={p}
-                    projects={projects}
+                    projects={validationPool}
                     menuOpen={openMenuId === p.id}
                     renaming={renamingId === p.id}
                     onOpen={onOpen}

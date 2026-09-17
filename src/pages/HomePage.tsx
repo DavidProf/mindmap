@@ -1,19 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert, Button, Snackbar } from "@mui/material";
+import { Alert, Button, FormControl, IconButton, InputLabel, MenuItem, Select, Snackbar, TextField } from "@mui/material";
 import AppHeader from "../components/layout/AppHeader";
 import ConfirmDeleteDialog from "../components/home/ConfirmDeleteDialog";
 import CreateProjectDialog from "../components/home/CreateProjectDialog";
 import HomeEmptyState from "../components/home/HomeEmptyState";
 import ProjectGrid from "../components/home/ProjectGrid";
 import ProjectMenu from "../components/home/ProjectMenu";
+import { PROJECT_IMPORT_MAX_BYTES, filterProjectsPure, hasUploadMedia, parseProjectImportPure, sanitizeExportFilenamePure, serializeProjectExportPure, sortProjectsPure, type HomeSortDir, type HomeSortKey } from "../lib/projectHome";
 import { consumeCorruptionFlag, validateProjectNamePure } from "../storage/localStore";
 import { initStorage, type StorageFallback } from "../storage/init";
 import {
     createProjectAsync,
     deleteProjectAsync,
+    duplicateProjectAsync,
     getNodeCountForProjectAsync,
     getProjectsSortedByUpdatedAtAsync,
+    importProjectAsync,
     renameProjectAsync,
 } from "../storage/operations";
 import type { StorageBackend } from "../storage/backend";
@@ -36,7 +39,12 @@ export default function HomePage() {
     const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
     const [deleteNodeCount, setDeleteNodeCount] = useState(0);
     const [quotaError, setQuotaError] = useState<string | null>(null);
+    const [exportNotice, setExportNotice] = useState<string | null>(null);
+    const [query, setQuery] = useState("");
+    const [sortKey, setSortKey] = useState<HomeSortKey>("updated");
+    const [sortDir, setSortDir] = useState<HomeSortDir>("desc");
     const [blobStore] = useState(() => createIdbMediaBlobStore());
+    const importInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -111,6 +119,38 @@ export default function HomePage() {
         }
     }
 
+    async function handleDuplicate(p: Project) {
+        if (!backend) return;
+        try {
+            await duplicateProjectAsync(backend, p.id, blobStore);
+            await refresh(backend);
+        } catch (e) {
+            setQuotaError(toUserError(e, "Failed to duplicate project."));
+        }
+    }
+
+    async function handleExport(p: Project) {
+        if (!backend) return;
+        try {
+            const nodes = (await backend.loadNodes()).filter((n) => n.projectId === p.id);
+            const file = serializeProjectExportPure(p, nodes);
+            const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = sanitizeExportFilenamePure(p.name);
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            if (hasUploadMedia(nodes)) {
+                setExportNotice("Uploaded image bytes are not included in JSON export; those nodes import as text.");
+            }
+        } catch (e) {
+            setQuotaError(toUserError(e, "Failed to export project."));
+        }
+    }
+
     function openMenu(e: React.MouseEvent<HTMLElement>, p: Project) {
         e.stopPropagation();
         setMenuAnchor(e.currentTarget);
@@ -128,11 +168,32 @@ export default function HomePage() {
         setDeleteTarget(p);
     }
 
+    async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        e.target.value = "";
+        if (!file || !backend) return;
+        if (file.size > PROJECT_IMPORT_MAX_BYTES) {
+            setQuotaError("Not a valid mindmap file: file is larger than 10MB.");
+            return;
+        }
+        try {
+            const text = await file.text();
+            const parsed = parseProjectImportPure(text);
+            await importProjectAsync(backend, parsed);
+            setQuery("");
+            await refresh(backend);
+        } catch (err) {
+            setQuotaError(err instanceof Error ? err.message : "Failed to import project.");
+        }
+    }
+
     function navigateToProject(id: string) {
         navigate(`/project/${id}`);
     }
 
     const isEmpty = projects.length === 0;
+    const filtering = query.trim().length > 0;
+    const visibleProjects = sortProjectsPure(filterProjectsPure(projects, query), sortKey, sortDir);
 
     return (
         <>
@@ -141,13 +202,27 @@ export default function HomePage() {
                 <div className="home-title-row">
                     <div>
                         <h1>Your projects</h1>
-                        <p>Local to this browser · sorted newest first</p>
+                        <p>Local to this browser</p>
                     </div>
-                    {!isEmpty && (
-                        <Button variant="contained" size="small" onClick={openCreate} aria-label="New project">
-                            + New project
+                    <div className="home-title-actions">
+                        <Button variant="outlined" size="small" onClick={() => importInputRef.current?.click()} aria-label="Import project from JSON">
+                            Import
                         </Button>
-                    )}
+                        {!isEmpty && (
+                            <Button variant="contained" size="small" onClick={openCreate} aria-label="New project">
+                                + New project
+                            </Button>
+                        )}
+                    </div>
+                    <input
+                        ref={importInputRef}
+                        type="file"
+                        accept=".json,application/json"
+                        hidden
+                        aria-hidden="true"
+                        tabIndex={-1}
+                        onChange={handleImportFile}
+                    />
                 </div>
 
                 {fallback === "localstorage" && (
@@ -173,15 +248,89 @@ export default function HomePage() {
                 ) : isEmpty ? (
                     <HomeEmptyState onCreate={openCreate} />
                 ) : (
-                    <ProjectGrid
-                        projects={projects}
-                        openMenuId={menuAnchor ? (menuProject?.id ?? null) : null}
-                        renamingId={renamingId}
-                        onOpen={navigateToProject}
-                        onMenu={openMenu}
-                        onRenameCommit={handleRenameCommit}
-                        onRenameCancel={() => setRenamingId(null)}
-                    />
+                    <>
+                        <div className="home-controls">
+                            <TextField
+                                size="small"
+                                label="Search projects"
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Search by name"
+                                sx={{ minWidth: 200, flex: 1 }}
+                            />
+                            <div className="home-sort-group">
+                                <FormControl
+                                    size="small"
+                                    sx={{
+                                        minWidth: 140,
+                                        "& .MuiOutlinedInput-root": { borderTopRightRadius: 0, borderBottomRightRadius: 0 },
+                                        "& .MuiOutlinedInput-notchedOutline": { borderRight: "none" },
+                                    }}
+                                >
+                                    <InputLabel id="home-sort-label">Sort</InputLabel>
+                                    <Select
+                                        labelId="home-sort-label"
+                                        label="Sort"
+                                        value={sortKey}
+                                        onChange={(e) => setSortKey(e.target.value as HomeSortKey)}
+                                    >
+                                        <MenuItem value="updated">Last updated</MenuItem>
+                                        <MenuItem value="created">Date created</MenuItem>
+                                        <MenuItem value="name">Name</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <IconButton
+                                    aria-label="Toggle sort direction"
+                                    onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                                    sx={{
+                                        minWidth: 76,
+                                        alignSelf: "stretch",
+                                        height: "auto",
+                                        border: 1,
+                                        borderLeft: 1,
+                                        borderColor: (theme) =>
+                                            theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.23)" : "rgba(0, 0, 0, 0.23)",
+                                        borderRadius: (theme) => `0 ${theme.shape.borderRadius}px ${theme.shape.borderRadius}px 0`,
+                                        color: "text.secondary",
+                                        fontSize: 13,
+                                        gap: "4px",
+                                        "&:hover": {
+                                            borderColor: "text.primary",
+                                        },
+                                    }}
+                                >
+                                    <span style={{ display: "inline-block", lineHeight: 1, transform: "translateY(-1px)" }}>
+                                        {sortDir === "asc" ? "↑" : "↓"}
+                                    </span>
+                                    {sortDir === "asc" ? "Asc" : "Desc"}
+                                </IconButton>
+                            </div>
+                        </div>
+                        {filtering && (
+                            <p className="home-count" aria-live="polite">
+                                {visibleProjects.length} of {projects.length} projects
+                            </p>
+                        )}
+                        {visibleProjects.length === 0 ? (
+                            <div className="home-filtered-empty">
+                                <p>No projects match &ldquo;{query.trim()}&rdquo;.</p>
+                                <Button variant="outlined" size="small" onClick={() => setQuery("")}>
+                                    Clear search
+                                </Button>
+                            </div>
+                        ) : (
+                            <ProjectGrid
+                                projects={visibleProjects}
+                                allProjects={projects}
+                                openMenuId={menuAnchor ? (menuProject?.id ?? null) : null}
+                                renamingId={renamingId}
+                                onOpen={navigateToProject}
+                                onMenu={openMenu}
+                                onRenameCommit={handleRenameCommit}
+                                onRenameCancel={() => setRenamingId(null)}
+                            />
+                        )}
+                    </>
                 )}
 
                 <ProjectMenu
@@ -190,6 +339,8 @@ export default function HomePage() {
                     onClose={closeMenu}
                     onOpen={navigateToProject}
                     onRename={openRename}
+                    onDuplicate={handleDuplicate}
+                    onExport={handleExport}
                     onDelete={openDelete}
                 />
 
@@ -215,6 +366,16 @@ export default function HomePage() {
                 >
                     <Alert severity="error" onClose={() => setQuotaError(null)} variant="filled">
                         {quotaError}
+                    </Alert>
+                </Snackbar>
+                <Snackbar
+                    open={Boolean(exportNotice)}
+                    autoHideDuration={6000}
+                    onClose={() => setExportNotice(null)}
+                    anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+                >
+                    <Alert severity="info" onClose={() => setExportNotice(null)} variant="filled">
+                        {exportNotice}
                     </Alert>
                 </Snackbar>
             </main>
